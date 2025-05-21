@@ -158,6 +158,45 @@ namespace WifiCheckApp
         {
             try
             {
+                var handler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
+                };
+
+                string email = EmailLabel.Text?.Trim();
+
+                if (string.IsNullOrEmpty(email))
+                {
+                    await DisplayAlert("Lỗi", "Email không được để trống.", "OK");
+                    return;
+                }
+
+                // ✅ Kiểm tra email có tồn tại trong database không
+                var verifyUrl = $"https://192.168.1.35:5001/api/TimeSkip/verify-email?email={email}";
+                var verifyHandler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
+                };
+
+                using (var verifyClient = new HttpClient(verifyHandler))
+                {
+                    try
+                    {
+                        var verifyResponse = await verifyClient.GetAsync(verifyUrl);
+                        if (!verifyResponse.IsSuccessStatusCode)
+                        {
+                            await DisplayAlert("Lỗi", "Email không tồn tại trong hệ thống, không thể check-in.", "OK");
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await DisplayAlert("Lỗi", $"Không thể xác minh email: {ex.Message}", "OK");
+                        return;
+                    }
+                }
+
+
                 DateTime now = DateTime.Now;
                 string todayKey = $"CheckInDone_{now:yyyyMMdd}";
 
@@ -170,7 +209,7 @@ namespace WifiCheckApp
                     return;
                 }
 
-                string email = EmailLabel.Text?.Trim();
+                
                 string deviceMac = await _wifiService.GetMacAddressAsync(_targetWifiName, _targetGateway);
 
                 if (string.IsNullOrEmpty(email))
@@ -196,11 +235,6 @@ namespace WifiCheckApp
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 string apiUrl = "https://192.168.1.35:5001/api/TimeSkip/checkin";
-
-                var handler = new HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
-                };
 
                 using (var httpClient = new HttpClient(handler))
                 {

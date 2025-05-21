@@ -40,7 +40,7 @@ namespace WifiCheckApp
             }
 
             DateTime savedDate = DateTime.Parse(savedDateStr);
-            if ((DateTime.Now - savedDate).TotalDays > 7) // Email expires after 7 days
+            if ((DateTime.Now - savedDate).TotalMinutes > 7) // Email expires after 7 days
             {
                 // Clear expired email
                 _preferences.Remove(EmailKey);

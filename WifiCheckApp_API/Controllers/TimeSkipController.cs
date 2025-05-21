@@ -155,5 +155,21 @@ namespace WifiCheckApp_API.Controllers
 
             return Ok(attendances);
         }
+
+        [HttpGet("verify-email")]
+        public async Task<IActionResult> VerifyEmail([FromQuery] string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                return BadRequest("Email is required.");
+
+            var exists = await _context.Employees
+                .AnyAsync(e => e.Email == email && e.IsActive == true);
+
+            if (!exists)
+                return NotFound("Email chưa được đăng ký trong hệ thống.");
+
+            return Ok("Email hợp lệ.");
+        }
+
     }
 }
