@@ -12,7 +12,7 @@ namespace WifiCheckApp_API.ViewModels
         public string DeviceMac { get; set; } = null!;
 
         [Required(ErrorMessage = "CheckIn time is required.")]
-        public DateTime? CheckIn { get; set; }
+        public DateTime CheckIn { get; set; }
 
         [Required]
         public string? Notes { get; set; }

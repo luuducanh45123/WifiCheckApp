@@ -11,7 +11,7 @@ public partial class Attendance
 
     public int? DeviceId { get; set; }
 
-    public int ShiftId { get; set; }
+    public int? ShiftId { get; set; }
 
     public DateTime CheckIn { get; set; }
 
@@ -20,6 +20,16 @@ public partial class Attendance
     public DateOnly WorkDate { get; set; }
 
     public string? Notes { get; set; }
+
+    public DateTime? MorningCheckIn { get; set; }
+
+    public DateTime? MorningCheckOut { get; set; }
+
+    public DateTime? AfternoonCheckIn { get; set; }
+
+    public DateTime? AfternoonCheckOut { get; set; }
+
+    public virtual ICollection<AttendanceHistory> AttendanceHistories { get; set; } = new List<AttendanceHistory>();
 
     public virtual Device? Device { get; set; }
 

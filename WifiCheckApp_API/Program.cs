@@ -1,8 +1,14 @@
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using WifiCheckApp_API.Models;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var jwtSettings = builder.Configuration.GetSection("Jwt");
+var secretKey = jwtSettings["Key"];
 // Add services to the container.
 
 builder.Services.AddControllers();
@@ -10,6 +16,23 @@ builder.Services.AddControllers();
 
 builder.Services.AddDbContext<TimeLapsContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+//var issuer = jwtSettings["Issuer"];
+//var audience = jwtSettings["Audience"];
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false,              // Không kiểm tra Issuer
+            ValidateAudience = false,            // Không kiểm tra Audience
+            ValidateLifetime = true,             // Có kiểm tra hạn token
+            ValidateIssuerSigningKey = true,     // Có kiểm tra chữ ký
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
