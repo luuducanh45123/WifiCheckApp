@@ -172,6 +172,45 @@ namespace WifiCheckApp
                 }
 
                 // ✅ Kiểm tra email có tồn tại trong database không
+                var verifyUrl = $"https://192.168.1.35:5001/api/TimeSkip/verify-email?email={email}";
+                var verifyHandler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
+                };
+
+                using (var verifyClient = new HttpClient(verifyHandler))
+                {
+                    try
+                    {
+                        var verifyResponse = await verifyClient.GetAsync(verifyUrl);
+                        if (!verifyResponse.IsSuccessStatusCode)
+                        {
+                            await DisplayAlert("Lỗi", "Email không tồn tại trong hệ thống, không thể check-in.", "OK");
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await DisplayAlert("Lỗi", $"Không thể xác minh email: {ex.Message}", "OK");
+                        return;
+                    }
+                }
+
+
+                var handler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
+                };
+
+                string email = EmailLabel.Text?.Trim();
+
+                if (string.IsNullOrEmpty(email))
+                {
+                    await DisplayAlert("Lỗi", "Email không được để trống.", "OK");
+                    return;
+                }
+
+                // ✅ Kiểm tra email có tồn tại trong database không
                 var verifyUrl = $"https://attendanceapihost.azurewebsites.net/api/TimeSkip/verify-email?email={email}";
                 var verifyHandler = new HttpClientHandler
                 {
@@ -234,7 +273,7 @@ namespace WifiCheckApp
                 var json = System.Text.Json.JsonSerializer.Serialize(checkinData);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                string apiUrl = "https://attendanceapihost.azurewebsites.net/api/TimeSkip/checkin";
+                string apiUrl = "https://192.168.1.35:5001/api/TimeSkip/checkin";
 
                 using (var httpClient = new HttpClient(handler))
                 {
