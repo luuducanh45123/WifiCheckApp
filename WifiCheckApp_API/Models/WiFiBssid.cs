@@ -3,11 +3,13 @@ using System.Collections.Generic;
 
 namespace WifiCheckApp_API.Models;
 
-public partial class Wifi
+public partial class WiFiBssid
 {
     public int Id { get; set; }
 
-    public string Ssid { get; set; } = null!;
+    public int? WiFiId { get; set; }
 
     public string? Bssid { get; set; }
+
+    public virtual WiFiLocation? WiFi { get; set; }
 }

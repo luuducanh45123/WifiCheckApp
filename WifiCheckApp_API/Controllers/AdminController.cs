@@ -17,13 +17,23 @@ namespace WifiCheckApp_API.Controllers
         {
             _context = context;
         }
+        private DateTime GetDateTimeLocal(DateTime dateTime)
+        {
+            var utcNow = DateTime.UtcNow;
+            var vnTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            return TimeZoneInfo.ConvertTimeFromUtc(utcNow, vnTimeZone);
+        }
 
         [HttpPut("{employeeId}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> UpdateAttendance(int employeeId, [FromBody] Attendance_update_model dto)
+        public async Task<IActionResult> UpdateAttendance(int employeeId, [FromBody] AttendanceUpdateModel dto)
         {
+            var workDate = DateOnly.FromDateTime(dto.Date);
+
             var attendance = await _context.Attendances
-                .FirstOrDefaultAsync(a => a.EmployeeId == employeeId && a.WorkDate == DateOnly.FromDateTime(dto.Date));
+                .FirstOrDefaultAsync(a =>
+                    a.EmployeeId == employeeId &&
+                    a.WorkDate == workDate);
 
             if (attendance == null)
                 return NotFound("Không tìm thấy bản ghi chấm công.");
@@ -40,23 +50,28 @@ namespace WifiCheckApp_API.Controllers
                         AttendanceId = attendance.AttendanceId,
                         ActionType = "Update",
                         PerformedBy = performedBy,
-                        PerformedAt = DateTime.Now,
+                        PerformedAt = GetDateTimeLocal(DateTime.Now),
                         OldValue = $"{field}: {oldValue}",
                         NewValue = $"{field}: {newValue}"
                     });
                 }
             }
 
-            TrackChange("MorningCheckIn", attendance.MorningCheckIn, dto.MorningCheckIn);
-            TrackChange("MorningCheckOut", attendance.MorningCheckOut, dto.MorningCheckOut);
-            TrackChange("AfternoonCheckIn", attendance.AfternoonCheckIn, dto.AfternoonCheckIn);
-            TrackChange("AfternoonCheckOut", attendance.AfternoonCheckOut, dto.AfternoonCheckOut);
+            // So sánh & lưu thay đổi
+            TrackChange("CheckInTime", attendance.CheckInTime, dto.CheckInTime);
+            TrackChange("CheckOutTime", attendance.CheckOutTime, dto.CheckOutTime);
+            TrackChange("CheckInStatus", attendance.CheckInStatus, dto.CheckInStatus);
+            TrackChange("CheckOutStatus", attendance.CheckOutStatus, dto.CheckOutStatus);
+            TrackChange("GpsId", attendance.GpsId, dto.GpsId);
+            TrackChange("WifiId", attendance.WiFiId, dto.WifiId);
 
-            // Cập nhật
-            attendance.MorningCheckIn = dto.MorningCheckIn;
-            attendance.MorningCheckOut = dto.MorningCheckOut;
-            attendance.AfternoonCheckIn = dto.AfternoonCheckIn;
-            attendance.AfternoonCheckOut = dto.AfternoonCheckOut;
+            // Cập nhật giá trị
+            attendance.CheckInTime = dto.CheckInTime;
+            attendance.CheckOutTime = dto.CheckOutTime;
+            attendance.CheckInStatus = dto.CheckInStatus;
+            attendance.CheckOutStatus = dto.CheckOutStatus;
+            attendance.GpsId = dto.GpsId;
+            attendance.WiFiId = dto.WifiId;
 
             _context.AttendanceHistories.AddRange(changes);
             await _context.SaveChangesAsync();
