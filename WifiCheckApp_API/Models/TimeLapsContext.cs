@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
-using WifiCheckApp_API.Models;
 
 namespace WifiCheckApp_API.Models;
 
@@ -20,23 +19,27 @@ public partial class TimeLapsContext : DbContext
 
     public virtual DbSet<AttendanceHistory> AttendanceHistories { get; set; }
 
+    public virtual DbSet<AttendanceSession> AttendanceSessions { get; set; }
+
     public virtual DbSet<Device> Devices { get; set; }
 
     public virtual DbSet<Employee> Employees { get; set; }
 
-    public virtual DbSet<LeaveType> LeaveTypes { get; set; }
+    public virtual DbSet<GpsLocation> GpsLocations { get; set; }
 
-    public virtual DbSet<Location> Locations { get; set; }
+    public virtual DbSet<LeaveType> LeaveTypes { get; set; }
 
     public virtual DbSet<Role> Roles { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
 
-    public virtual DbSet<Wifi> Wifis { get; set; }
+    public virtual DbSet<WiFiBssid> WiFiBssids { get; set; }
 
-//    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-//#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-//        => optionsBuilder.UseSqlServer("Server=tcp:vinashoot.database.windows.net,1433;Initial Catalog=TIMELAPS;Persist Security Info=False;User ID=vinashoot;Password=SunnyDay#42;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;");
+    public virtual DbSet<WiFiLocation> WiFiLocations { get; set; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
+        => optionsBuilder.UseSqlServer("Server=tcp:vinashoot.database.windows.net,1433;Database=TIMELAPS;User ID=vinashoot;Password=SunnyDay#42;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,25 +48,29 @@ public partial class TimeLapsContext : DbContext
             entity.HasKey(e => e.AttendanceId).HasName("PK__Attendan__8B69263C18D3A907");
 
             entity.Property(e => e.AttendanceId).HasColumnName("AttendanceID");
-            entity.Property(e => e.AfternoonCheckIn).HasColumnType("datetime");
-            entity.Property(e => e.AfternoonCheckOut).HasColumnType("datetime");
-            entity.Property(e => e.CheckIn).HasColumnType("datetime");
-            entity.Property(e => e.CheckOut).HasColumnType("datetime");
-            entity.Property(e => e.DeviceId).HasColumnName("DeviceID");
+            entity.Property(e => e.CheckInStatus).HasMaxLength(50);
+            entity.Property(e => e.CheckInTime).HasColumnType("datetime");
+            entity.Property(e => e.CheckOutStatus).HasMaxLength(50);
+            entity.Property(e => e.CheckOutTime).HasColumnType("datetime");
             entity.Property(e => e.EmployeeId).HasColumnName("EmployeeID");
-            entity.Property(e => e.MorningCheckIn).HasColumnType("datetime");
-            entity.Property(e => e.MorningCheckOut).HasColumnType("datetime");
             entity.Property(e => e.Notes).HasMaxLength(200);
-            entity.Property(e => e.ShiftId).HasColumnName("ShiftID");
-
-            entity.HasOne(d => d.Device).WithMany(p => p.Attendances)
-                .HasForeignKey(d => d.DeviceId)
-                .HasConstraintName("FK_Attendances_Devices");
 
             entity.HasOne(d => d.Employee).WithMany(p => p.Attendances)
                 .HasForeignKey(d => d.EmployeeId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Attendances_Employees");
+
+            entity.HasOne(d => d.Gps).WithMany(p => p.Attendances)
+                .HasForeignKey(d => d.GpsId)
+                .HasConstraintName("FK_Attendance_Gps");
+
+            entity.HasOne(d => d.Session).WithMany(p => p.Attendances)
+                .HasForeignKey(d => d.SessionId)
+                .HasConstraintName("FK_Attendance_Session");
+
+            entity.HasOne(d => d.WiFi).WithMany(p => p.Attendances)
+                .HasForeignKey(d => d.WiFiId)
+                .HasConstraintName("FK_Attendance_WiFi");
         });
 
         modelBuilder.Entity<AttendanceHistory>(entity =>
@@ -86,6 +93,15 @@ public partial class TimeLapsContext : DbContext
             entity.HasOne(d => d.PerformedByNavigation).WithMany(p => p.AttendanceHistories)
                 .HasForeignKey(d => d.PerformedBy)
                 .HasConstraintName("FK__Attendanc__Perfo__160F4887");
+        });
+
+        modelBuilder.Entity<AttendanceSession>(entity =>
+        {
+            entity.HasKey(e => e.SessionId).HasName("PK__Attendan__C9F4929090DAB012");
+
+            entity.ToTable("AttendanceSession");
+
+            entity.Property(e => e.Name).HasMaxLength(20);
         });
 
         modelBuilder.Entity<Device>(entity =>
@@ -116,6 +132,16 @@ public partial class TimeLapsContext : DbContext
             entity.Property(e => e.Position).HasMaxLength(100);
         });
 
+        modelBuilder.Entity<GpsLocation>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__Location__3214EC07ED62AC45");
+
+            entity.ToTable("GpsLocation");
+
+            entity.Property(e => e.Name).HasMaxLength(100);
+            entity.Property(e => e.RadiusInMeters).HasDefaultValue(100.0);
+        });
+
         modelBuilder.Entity<LeaveType>(entity =>
         {
             entity.HasKey(e => e.LeaveTypeId).HasName("PK__LeaveTyp__43BE8FF4DB3CD53D");
@@ -123,16 +149,6 @@ public partial class TimeLapsContext : DbContext
             entity.Property(e => e.LeaveTypeId).HasColumnName("LeaveTypeID");
             entity.Property(e => e.Description).HasMaxLength(255);
             entity.Property(e => e.LeaveTypeName).HasMaxLength(100);
-        });
-
-        modelBuilder.Entity<Location>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("PK__Location__3214EC07ED62AC45");
-
-            entity.ToTable("Location");
-
-            entity.Property(e => e.Description).HasMaxLength(255);
-            entity.Property(e => e.Name).HasMaxLength(100);
         });
 
         modelBuilder.Entity<Role>(entity =>
@@ -169,15 +185,27 @@ public partial class TimeLapsContext : DbContext
                 .HasConstraintName("FK__Users__RoleID__10566F31");
         });
 
-        modelBuilder.Entity<Wifi>(entity =>
+        modelBuilder.Entity<WiFiBssid>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__WiFiBSSI__3214EC072B439109");
+
+            entity.ToTable("WiFiBSSID");
+
+            entity.Property(e => e.Bssid)
+                .HasMaxLength(100)
+                .HasColumnName("BSSID");
+
+            entity.HasOne(d => d.WiFi).WithMany(p => p.WiFiBssids)
+                .HasForeignKey(d => d.WiFiId)
+                .HasConstraintName("FK__WiFiBSSID__WiFiI__3493CFA7");
+        });
+
+        modelBuilder.Entity<WiFiLocation>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK__Wifi__3214EC07E0FA9EAA");
 
-            entity.ToTable("Wifi");
+            entity.ToTable("WiFiLocation");
 
-            entity.Property(e => e.Bssid)
-                .HasMaxLength(50)
-                .HasColumnName("BSSID");
             entity.Property(e => e.Ssid)
                 .HasMaxLength(100)
                 .HasColumnName("SSID");

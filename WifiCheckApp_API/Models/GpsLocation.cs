@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace WifiCheckApp_API.Models;
 
-public partial class Location
+public partial class GpsLocation
 {
     public int Id { get; set; }
 
@@ -13,5 +13,7 @@ public partial class Location
 
     public double Longitude { get; set; }
 
-    public string? Description { get; set; }
+    public double RadiusInMeters { get; set; }
+
+    public virtual ICollection<Attendance> Attendances { get; set; } = new List<Attendance>();
 }

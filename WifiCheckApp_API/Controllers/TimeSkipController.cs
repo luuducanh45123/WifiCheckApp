@@ -19,147 +19,118 @@ namespace WifiCheckApp_API.Controllers
         }
 
         [HttpPost("checkin")]
-        public async Task<IActionResult> CheckIn([FromBody] Checkin_model dto)
+        public async Task<IActionResult> CheckIn([FromBody] CheckinModel dto)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
             var employee = await _context.Employees
                 .FirstOrDefaultAsync(e => e.Email == dto.Email && e.IsActive == true);
+
             if (employee == null)
-                return NotFound($"Employee with email {dto.Email} not found or inactive.");
+                return NotFound($"Không tìm thấy nhân viên với email {dto.Email} hoặc đã bị vô hiệu hóa.");
 
-            var device = await _context.Devices
-                .FirstOrDefaultAsync(d => d.MacAddress == dto.DeviceMac && d.IsActive == true);
-            if (device == null)
-            {
-                device = new Device
-                {
-                    MacAddress = dto.DeviceMac,
-                    IsActive = true
-                };
-                _context.Devices.Add(device);
-                await _context.SaveChangesAsync();
-            }
-
-            var checkInTime = dto.CheckIn;
+            var checkInTime = GetDateTimeLocal(dto.CheckIn);
             var today = DateOnly.FromDateTime(checkInTime);
-            bool isMorning = checkInTime.TimeOfDay < TimeSpan.FromHours(12);
 
-            var attendance = await _context.Attendances
-                .FirstOrDefaultAsync(a => a.EmployeeId == employee.EmployeeId && a.WorkDate == today);
-
-            if (attendance == null)
-            {
-                attendance = new Attendance
-                {
-                    EmployeeId = employee.EmployeeId,
-                    DeviceId = device.DeviceId,
-                    WorkDate = today,
-                    Notes = dto.Notes,
-                    CheckIn = checkInTime, // Ban đầu: thời gian sớm nhất
-                    MorningCheckIn = isMorning ? checkInTime : null,
-                    AfternoonCheckIn = !isMorning ? checkInTime : null
-                };
-
-                _context.Attendances.Add(attendance);
-            }
+            // Tự động xác định session theo giờ
+            int sessionId;
+            if (dto.TypeCheck == 1)
+                sessionId = 1; // Sáng
             else
+                sessionId = 2; // Chiều
+
+            // Kiểm tra xem đã check-in cho session này trong ngày hưa chưa
+            var existingCheckin = await _context.Attendances
+                .FirstOrDefaultAsync(a => a.EmployeeId == employee.EmployeeId
+                                        && a.WorkDate == today
+                                        && a.SessionId == sessionId
+                                        && a.CheckInTime != null);
+
+            if (existingCheckin != null)
             {
-                // Không tạo mới – chỉ cập nhật
-                if (isMorning)
-                {
-                    if (attendance.MorningCheckIn != null)
-                        return BadRequest("Đã check-in ca sáng hôm nay.");
-
-                    attendance.MorningCheckIn = checkInTime;
-                }
-                else
-                {
-                    if (attendance.AfternoonCheckIn != null)
-                        return BadRequest("Đã check-in ca chiều hôm nay.");
-
-                    attendance.AfternoonCheckIn = checkInTime;
-                }
-
-                // Gán check-in là thời gian sớm nhất (nếu chưa có hoặc mới phát sinh)
-                if (attendance.CheckIn == null || checkInTime < attendance.CheckIn)
-                    attendance.CheckIn = checkInTime;
-
-                // Gán check-out là thời gian muộn nhất
-                if (attendance.CheckOut == null || checkInTime > attendance.CheckOut)
-                    attendance.CheckOut = checkInTime;
-
-                attendance.DeviceId = device.DeviceId;
-                attendance.Notes = dto.Notes;
+                return BadRequest($"Nhân viên đã check-in cho ca {(sessionId == 1 ? "sáng" : "chiều")} hôm nay lúc {existingCheckin.CheckInTime:HH:mm}.");
             }
 
+            var attendance = new Attendance
+            {
+                EmployeeId = employee.EmployeeId,
+                WorkDate = today,
+                SessionId = sessionId,
+                CheckInTime = checkInTime,
+                Notes = dto.Notes,
+                WiFiId = dto.WifiId,
+                GpsId = dto.GpsId,
+                CheckInStatus = dto.CheckInStatus,
+                LateMinutes = dto.LateMinute,
+            };
+
+            _context.Attendances.Add(attendance);
             await _context.SaveChangesAsync();
 
             return Ok(new
             {
                 message = "Check-in thành công.",
-                ca = isMorning ? "Sáng" : "Chiều",
+                ca = sessionId == 1 ? "Sáng" : "Chiều",
                 checkInTime = checkInTime,
                 attendanceId = attendance.AttendanceId
             });
         }
 
-
-
         [HttpPost("checkout")]
-        public async Task<IActionResult> CheckOut([FromBody] Checkout_model dto)
+        public async Task<IActionResult> CheckOut([FromBody] CheckOutModel dto)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
             var employee = await _context.Employees
                 .FirstOrDefaultAsync(e => e.Email == dto.Email && e.IsActive == true);
+
             if (employee == null)
                 return NotFound($"Employee with email {dto.Email} not found or inactive.");
 
-            var device = await _context.Devices
-                .FirstOrDefaultAsync(d => d.MacAddress == dto.DeviceMac && d.IsActive == true);
-            if (device == null)
-            {
-                device = new Device
-                {
-                    MacAddress = dto.DeviceMac,
-                    IsActive = true
-                };
-                _context.Devices.Add(device);
-                await _context.SaveChangesAsync();
-            }
+            var today = DateOnly.FromDateTime(GetDateTimeLocal(DateTime.Now));
 
-            var today = DateOnly.FromDateTime(DateTime.Now);
+            int sessionId;
+            if (dto.TypeCheck == 1)
+                sessionId = 1; // Sáng
+            else
+                sessionId = 2; // Chiều
 
+            // Kiểm tra xem đã có bản ghi check-in cho ngày hôm nay và session này chưa
             var existingAttendance = await _context.Attendances
-                .FirstOrDefaultAsync(a => a.EmployeeId == employee.EmployeeId && a.WorkDate == today);
+                .FirstOrDefaultAsync(a => a.EmployeeId == employee.EmployeeId
+                                        && a.WorkDate == today
+                                        && a.SessionId == sessionId);
 
             if (existingAttendance == null)
-                return BadRequest("Chưa check-in hôm nay. Không thể check-out.");
+            {
+                return BadRequest($"Nhân viên chưa check-in cho ca {(sessionId == 1 ? "sáng" : "chiều")} hôm nay. Vui lòng check-in trước khi check-out.");
+            }
 
-            //if (existingAttendance.CheckOut != null)
-            //    return BadRequest("Đã check-out rồi.");
+            // Kiểm tra xem đã check-out chưa
+            if (existingAttendance.CheckOutTime != null)
+            {
+                return BadRequest($"Nhân viên đã check-out cho ca {(sessionId == 1 ? "sáng" : "chiều")} hôm nay lúc {existingAttendance.CheckOutTime:HH:mm}.");
+            }
 
-            if (existingAttendance.CheckIn == null)
-                return BadRequest("CheckIn time not found. Cannot proceed with CheckOut.");
+            // Update bản ghi hiện có với thông tin check-out
+            existingAttendance.CheckOutTime = GetDateTimeLocal(dto.CheckOut);
+            existingAttendance.Notes = dto.Notes;
+            existingAttendance.WiFiId = dto.WifiId;
+            existingAttendance.GpsId = dto.GpsId;
+            existingAttendance.CheckOutStatus = dto.checkOutStatus;
+            existingAttendance.EarlyCheckOutMinutes = dto.EarlyCheckOutMinutes;
 
-            if (dto.Checkout == null)
-                return BadRequest("CheckOut time is required.");
-
-            existingAttendance.CheckOut = dto.Checkout.Value;
-            existingAttendance.DeviceId = device.DeviceId;
-            existingAttendance.Notes = "CheckOut";
-
+            _context.Attendances.Update(existingAttendance);
             await _context.SaveChangesAsync();
 
             return Ok(new
             {
                 message = "Check-out thành công.",
                 attendanceId = existingAttendance.AttendanceId,
-                checkInTime = existingAttendance.CheckIn,
-                checkOutTime = existingAttendance.CheckOut
+                checkInTime = existingAttendance.CheckInTime,
+                checkOutTime = existingAttendance.CheckOutTime
             });
         }
 
@@ -169,11 +140,9 @@ namespace WifiCheckApp_API.Controllers
             var totalDays = DateTime.DaysInMonth(year, month);
             var startDate = new DateOnly(year, month, 1);
             var endDate = new DateOnly(year, month, totalDays);
+            var today = DateOnly.FromDateTime(GetDateTimeLocal(DateTime.Now));
 
-            // Ngày hiện tại
-            var today = DateOnly.FromDateTime(DateTime.Now);
-
-            // Lấy dữ liệu chấm công trong khoảng
+            // Lấy toàn bộ dữ liệu chấm công trong tháng
             var attendances = await _context.Attendances
                 .Where(a => a.EmployeeId == employeeId && a.WorkDate >= startDate && a.WorkDate <= endDate)
                 .ToListAsync();
@@ -184,17 +153,12 @@ namespace WifiCheckApp_API.Controllers
             {
                 var date = new DateOnly(year, month, day);
 
-                // Nếu ngày trong tương lai -> bỏ qua
                 if (date > today)
                     continue;
 
-                var dayOfWeek = date.DayOfWeek; // Sunday = 0, Monday = 1, ..., Saturday = 6
-
-                // Tính tuần trong tháng (tuần bắt đầu từ thứ Hai)
-                // Tuần 1: ngày 1-7, tuần 2: 8-14, tuần 3: 15-21, ...
+                var dayOfWeek = date.DayOfWeek;
                 int weekOfMonth = ((day - 1) / 7) + 1;
 
-                // Nếu Chủ Nhật hoặc Thứ Bảy của tuần 1 hoặc tuần 3 -> để trống (không hiển thị vắng mặt)
                 bool isSunday = dayOfWeek == DayOfWeek.Sunday;
                 bool isSpecialSaturday = dayOfWeek == DayOfWeek.Saturday && (weekOfMonth == 1 || weekOfMonth == 3);
 
@@ -211,15 +175,16 @@ namespace WifiCheckApp_API.Controllers
                     continue;
                 }
 
-                var attendance = attendances.FirstOrDefault(a => a.WorkDate == date);
+                var morning = attendances.FirstOrDefault(a => a.WorkDate == date && a.SessionId == 1);
+                var afternoon = attendances.FirstOrDefault(a => a.WorkDate == date && a.SessionId == 2);
 
                 var dto = new Daily_attendance_model
                 {
                     Day = day,
-                    MorningCheckIn = attendance?.MorningCheckIn?.ToString("HH:mm") ?? "Vắng",
-                    MorningCheckOut = attendance?.MorningCheckOut?.ToString("HH:mm") ?? "Vắng",
-                    AfternoonCheckIn = attendance?.AfternoonCheckIn?.ToString("HH:mm") ?? "Vắng",
-                    AfternoonCheckOut = attendance?.AfternoonCheckOut?.ToString("HH:mm") ?? "Vắng"
+                    MorningCheckIn = morning?.CheckInTime?.ToString("HH:mm") ?? "Vắng",
+                    MorningCheckOut = morning?.CheckOutTime?.ToString("HH:mm") ?? "Vắng",
+                    AfternoonCheckIn = afternoon?.CheckInTime?.ToString("HH:mm") ?? "Vắng",
+                    AfternoonCheckOut = afternoon?.CheckOutTime?.ToString("HH:mm") ?? "Vắng"
                 };
 
                 result.Add(dto);
@@ -227,6 +192,7 @@ namespace WifiCheckApp_API.Controllers
 
             return Ok(result);
         }
+
 
         [HttpGet("verify-email")]
         public async Task<IActionResult> VerifyEmail([FromQuery] string email)
@@ -243,5 +209,31 @@ namespace WifiCheckApp_API.Controllers
             return Ok("Email hợp lệ.");
         }
 
+        [HttpGet("attendance/summary")]
+        public async Task<IActionResult> GetAttendanceSummary(int employeeId, int month, int year)
+        {
+            //var startDate = new DateOnly(year, month, 1);
+            //var endDate = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+            //var attendances = await _context.Attendances
+            //    .Where(a => a.EmployeeId == employeeId && a.WorkDate >= startDate && a.WorkDate <= endDate)
+            //    .ToListAsync();
+
+            //var summary = new
+            //{
+            //    TotalDays = endDate.Day,
+            //    PresentDays = attendances.Count(a => a.CheckInTime.HasValue),
+            //    AbsentDays = endDate.Day - attendances.Count(a => a.CheckInTime.HasValue),
+            //    LateCheckIns = attendances.Count(a => a.CheckInStatus == "Late"),
+            //    EarlyCheckOuts = attendances.Count(a => a.CheckOutStatus == "Early")
+            //};
+            return Ok();
+        }
+
+        private DateTime GetDateTimeLocal(DateTime dateTime)
+        {
+            var utcNow = DateTime.UtcNow;
+            var vnTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            return TimeZoneInfo.ConvertTimeFromUtc(utcNow, vnTimeZone);
+        }
     }
 }

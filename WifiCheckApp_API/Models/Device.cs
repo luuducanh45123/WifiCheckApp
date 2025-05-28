@@ -12,6 +12,4 @@ public partial class Device
     public string? Description { get; set; }
 
     public bool? IsActive { get; set; }
-
-    public virtual ICollection<Attendance> Attendances { get; set; } = new List<Attendance>();
 }
