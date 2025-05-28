@@ -146,6 +146,12 @@ document.addEventListener("DOMContentLoaded", () => {
   updateForm.onsubmit = async (e) => {
     e.preventDefault();
 
+    if (role?.toLowerCase() !== "admin") {
+      alert("Bạn không có quyền cập nhật dữ liệu.");
+      return;  // Dừng không gửi request
+    }
+
+
     const morningIn = document.getElementById("morningCheckIn").value;
     const morningOut = document.getElementById("morningCheckOut").value;
     const afternoonIn = document.getElementById("afternoonCheckIn").value;

@@ -6,35 +6,33 @@
   <title>Bảng Tổng Hợp Công</title>
   <link rel="stylesheet" href="/css/admin.css"/>
   <link rel="stylesheet" href="/css/header.css" />
+  <script src="/js/admin.js"></script>
 </head>
 <body>
   <!-- Header -->
  <div class="navbar">
   <div class="menu">
-    <a href="#">Hồ sơ</a>
-    <a href="#" class="active">Bảng công</a>
-    <a href="#">Phiếu lương</a>
-    <a href="#">Chinh</a>
-    <a href="#">Hợp đồng</a> 
   </div>
-  <div class="user">
-    <span>Xin chào, Ngọc Anh</span>
-    <img src="https://i.pravatar.cc/32" alt="avatar" style="border-radius: 50%;" />
-  </div> 
+  <div id="user-dropdown" class="user-dropdown">
+    <span id="user-name" class="user-name">Admin </span>
+      <div id="dropdown-menu" class="dropdown-menu">
+      <a href="/html/login.html" id="logout">Đăng xuất</a>
+    </div>
+  </div>
 </div>  
    <div class="header-call">
     <div class="search-bar">
       <label for="month">Tháng:</label>
-      <input id="month" type="month" value="2022-03" />
+      <input id="month" type="month" />
 
       <label for="type">Loại công:</label>
       <select id="type">
-        <option selected>-- Chọn loại công --</option>
+
       </select>
 
-      <input type="text" placeholder="Nhân viên" />
+      <input id="search-name" type="text" placeholder="Nhân viên" />
+      <button class="btn-search" id="search-button">Tìm kiếm</button>
 
-      <button class="btn-search">Tìm kiếm</button>
       <button class="btn-export">Export</button>
     </div>
   </div>
@@ -46,34 +44,73 @@
         <tr>
           <th>Mã Nhân Viên</th>
           <th>Họ Và Tên</th>
-          <th>Công làm việc</th>
-          <th>Công phép</th>
+          <th>Tổng công làm việc trong tháng</th>
+          <th>Nghỉ có lương</th>
           <th>Nghỉ không lương</th>
-          <th>Nghỉ sinh nhật</th>
-          <th>Nghỉ thai sản</th>
-          <th>Làm việc tại nhà</th>
-          <th>Nghỉ việc riêng có lương</th>
-          <th>Nghỉ lễ</th>
-          <th>Nghỉ bù</th>
+          <th>Tổng số buổi đi muộn</th>
+          <th>Đơn đang chờ duyệt</th>
+          <th>Tổng thời gian đi muộn</th>
+          
+          <th>Duyệt đơn</th>
         </tr>
       </thead>
-      <tbody>
-        <tr>
-          <td>NV01</td>
-          <td>Linh An</td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td></td>
-        </tr>
-        <!-- Có thể thêm nhiều dòng khác -->
+      <tbody id="table-body">
+
       </tbody>
     </table>
   </div>
+
+  <!-- pup-up để thực hiện đổi trạng thái đơn -->
+<div id="popup" class="popup-overlay hidden">
+  <div class="popup-content">
+    <h3>Xác nhận chuyển trạng thái đơn</h3>
+    <p><strong>Mã nhân viên:</strong> <span id="popup-employeeId"></span></p>
+    <p><strong>Số đơn đang chờ duyệt:</strong> <span id="popup-paid"></span></p>
+    
+    <div class="popup-buttons">
+      <button id="confirm-btn">Đồng ý</button>
+      <button id="cancel-btn">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const userName = document.getElementById('user-name');
+    const dropdownMenu = document.getElementById('dropdown-menu');
+    const logoutLink = document.getElementById('logout');
+
+    // Hiện/ẩn dropdown menu
+    userName.addEventListener('click', function () {
+      dropdownMenu.style.display = dropdownMenu.style.display === 'block' ? 'none' : 'block';
+    });
+
+    // Ẩn dropdown khi click ra ngoài
+    document.addEventListener('click', function (e) {
+      if (!document.getElementById('user-dropdown').contains(e.target)) {
+        dropdownMenu.style.display = 'none';
+      }
+    });
+
+    // Xử lý đăng xuất
+    logoutLink.addEventListener('click', function (e) {
+      e.preventDefault(); // Ngăn chuyển trang ngay lập tức
+
+      // Xóa token và thông tin người dùng khỏi localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('userName'); // nếu bạn có lưu userName
+
+      // Chuyển hướng về trang đăng nhập
+      window.location.href = '/html/login.html';
+    });
+
+    // Load tên user từ localStorage nếu có
+    const storedName = localStorage.getItem('userName');
+    if (storedName) {
+      userName.textContent = storedName;
+    }
+  });
+</script>
+
 </body>
 </html>
