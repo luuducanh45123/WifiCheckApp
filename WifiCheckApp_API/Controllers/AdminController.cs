@@ -19,9 +19,8 @@ namespace WifiCheckApp_API.Controllers
         }
         private DateTime GetDateTimeLocal(DateTime dateTime)
         {
-            var utcNow = DateTime.UtcNow;
             var vnTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
-            return TimeZoneInfo.ConvertTimeFromUtc(utcNow, vnTimeZone);
+            return TimeZoneInfo.ConvertTimeFromUtc(dateTime, vnTimeZone);
         }
 
         [HttpPut("{employeeId}")]
