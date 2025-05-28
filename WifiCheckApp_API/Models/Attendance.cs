@@ -31,6 +31,10 @@ public partial class Attendance
 
     public int? EarlyCheckOutMinutes { get; set; }
 
+    public string? LeaveType { get; set; }
+
+    public string? Status { get; set; }
+
     public virtual ICollection<AttendanceHistory> AttendanceHistories { get; set; } = new List<AttendanceHistory>();
 
     public virtual Employee Employee { get; set; } = null!;

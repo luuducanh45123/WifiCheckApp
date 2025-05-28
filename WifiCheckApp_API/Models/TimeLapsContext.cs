@@ -39,7 +39,7 @@ public partial class TimeLapsContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=tcp:vinashoot.database.windows.net,1433;Database=TIMELAPS;User ID=vinashoot;Password=SunnyDay#42;");
+        => optionsBuilder.UseSqlServer("Server=tcp:vinashoot.database.windows.net,1433;Initial Catalog=TIMELAPS;Persist Security Info=False;User ID=vinashoot;Password=SunnyDay#42;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,7 +53,9 @@ public partial class TimeLapsContext : DbContext
             entity.Property(e => e.CheckOutStatus).HasMaxLength(50);
             entity.Property(e => e.CheckOutTime).HasColumnType("datetime");
             entity.Property(e => e.EmployeeId).HasColumnName("EmployeeID");
+            entity.Property(e => e.LeaveType).HasMaxLength(50);
             entity.Property(e => e.Notes).HasMaxLength(200);
+            entity.Property(e => e.Status).HasMaxLength(50);
 
             entity.HasOne(d => d.Employee).WithMany(p => p.Attendances)
                 .HasForeignKey(d => d.EmployeeId)

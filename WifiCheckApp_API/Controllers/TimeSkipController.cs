@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Globalization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WifiCheckApp_API.Models;
 using WifiCheckApp_API.ViewModels;
@@ -235,5 +236,158 @@ namespace WifiCheckApp_API.Controllers
             var vnTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
             return TimeZoneInfo.ConvertTimeFromUtc(utcNow, vnTimeZone);
         }
+
+        [HttpGet("summary")]
+        public IActionResult GetAttendanceSummary([FromQuery] string month)
+        {
+            if (string.IsNullOrWhiteSpace(month) || month.Length != 7)
+                return BadRequest("Tháng không hợp lệ");
+
+            if (!DateTime.TryParseExact(month, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var startDate))
+                return BadRequest("Tháng không hợp lệ");
+
+            var endDate = startDate.AddMonths(1);
+
+            var summary = _context.Employees
+                .Where(e => e.IsActive == true)
+                .Select(e => new
+                {
+                    EmployeeId = e.EmployeeId,
+                    FullName = e.FullName,
+
+                    TotalWorkingDays = e.Attendances.Count(a =>
+                        a.WorkDate >= DateOnly.FromDateTime(startDate) &&
+                        a.WorkDate < DateOnly.FromDateTime(endDate) &&
+                        a.CheckInTime != null && a.CheckOutTime != null
+                    ),
+
+                    TotalPaidLeaves = e.Attendances.Count(a =>
+                        a.WorkDate >= DateOnly.FromDateTime(startDate) &&
+                        a.WorkDate < DateOnly.FromDateTime(endDate) &&
+                        a.LeaveType == "Paid" &&
+                        a.Status == "Approve"
+                    ),
+
+                    TotalUnpaidLeaves = e.Attendances.Count(a =>
+                        a.WorkDate >= DateOnly.FromDateTime(startDate) &&
+                        a.WorkDate < DateOnly.FromDateTime(endDate) &&
+                        a.LeaveType == "Unpaid" &&
+                        a.Status == "Approve"
+                    ),
+
+                    TotalPendingLeaves = e.Attendances.Count(a =>
+                        a.WorkDate >= DateOnly.FromDateTime(startDate) &&
+                        a.WorkDate < DateOnly.FromDateTime(endDate) &&
+                        (a.LeaveType == "Paid" || a.LeaveType == "Unpaid") &&
+                        a.Status == "Confirm"
+                    ),
+
+                    TotalLateSessions = e.Attendances.Count(a =>
+                        a.WorkDate >= DateOnly.FromDateTime(startDate) &&
+                        a.WorkDate < DateOnly.FromDateTime(endDate) &&
+                        a.LateMinutes.HasValue && a.LateMinutes > 0
+                    ),
+
+                    TotalLateMinutes = e.Attendances
+                        .Where(a =>
+                            a.WorkDate >= DateOnly.FromDateTime(startDate) &&
+                            a.WorkDate < DateOnly.FromDateTime(endDate)
+                        )
+                        .Sum(a => (a.LateMinutes ?? 0) + (a.EarlyCheckOutMinutes ?? 0))
+                })
+                .ToList();
+
+            var result = summary.Select((x, index) => new
+            {
+                STT = index + 1,
+                x.EmployeeId,
+                x.FullName,
+                x.TotalWorkingDays,
+                x.TotalPaidLeaves,
+                x.TotalUnpaidLeaves,
+                x.TotalPendingLeaves,
+                x.TotalLateSessions,
+                x.TotalLateMinutes
+            });
+
+            return Ok(result);
+        }
+
+
+
+        [HttpGet("leave-types")]
+        public IActionResult GetLeaveTypes()
+        {
+            var leaveTypes = _context.Attendances
+                .Where(a => !string.IsNullOrEmpty(a.LeaveType))
+                .Select(a => a.LeaveType)
+                .Distinct()
+                .ToList();
+
+            var result = leaveTypes.Select(type => new
+            {
+                Value = type,
+                Text = type == "Paid" ? "Nghỉ phép (có lương)" :
+                       type == "Unpaid" ? "Nghỉ không phép" :
+                       type
+            }).ToList();
+
+            // Nếu muốn hiển thị thêm trên UI (ví dụ cho dropdown lọc trạng thái), có thể thêm:
+            result.Add(new
+            {
+                Value = "Pending",
+                Text = "Đơn nghỉ đang chờ duyệt"
+            });
+
+            return Ok(result);
+        }
+
+
+        [HttpPost("convert-unpaid")]
+        public async Task<IActionResult> ConvertUnpaid([FromBody] Convert_request_model request)
+        {
+            if (request.EmployeeIds == null || !request.EmployeeIds.Any())
+                return BadRequest("Danh sách nhân viên không hợp lệ");
+
+            if (string.IsNullOrWhiteSpace(request.Month) || !DateTime.TryParse($"{request.Month}-01", out var monthStart))
+                return BadRequest("Tháng không hợp lệ. Định dạng đúng là yyyy-MM");
+
+            var year = monthStart.Year;
+            var month = monthStart.Month;
+
+            var attendances = await _context.Attendances
+                .Where(a =>
+                    request.EmployeeIds.Contains(a.EmployeeId) &&
+                    a.WorkDate.Year == year &&
+                    a.WorkDate.Month == month &&
+                    a.LeaveType == "Unpaid" &&
+                    a.Status == "Confirm")
+                .ToListAsync();
+
+            foreach (var record in attendances)
+            {
+                if (request.IsApproved)
+                {
+                    record.LeaveType = "Paid";
+                    record.Status = "Approve";
+                }
+                else
+                {
+                    // Giữ nguyên LeaveType là Unpaid
+                    record.Status = "Reject";
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                UpdatedCount = attendances.Count,
+                Message = request.IsApproved
+                    ? $"{attendances.Count} đơn đã được duyệt thành công."
+                    : $"{attendances.Count} đơn đã bị từ chối."
+            });
+        }
+
     }
 }
