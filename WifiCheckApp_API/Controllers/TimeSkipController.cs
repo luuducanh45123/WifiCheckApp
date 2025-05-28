@@ -31,8 +31,7 @@ namespace WifiCheckApp_API.Controllers
             if (employee == null)
                 return NotFound($"Không tìm thấy nhân viên với email {dto.Email} hoặc đã bị vô hiệu hóa.");
 
-            var checkInTime = GetDateTimeLocal(dto.CheckIn);
-            var today = DateOnly.FromDateTime(checkInTime);
+            var today = DateOnly.FromDateTime(dto.CheckIn);
 
             // Tự động xác định session theo giờ
             int sessionId;
@@ -50,7 +49,7 @@ namespace WifiCheckApp_API.Controllers
 
             if (existingCheckin != null)
             {
-                return BadRequest($"Nhân viên đã check-in cho ca {(sessionId == 1 ? "sáng" : "chiều")} hôm nay lúc {existingCheckin.CheckInTime:HH:mm}.");
+                return BadRequest($"Nhân viên đã check-in cho ca {(sessionId == 1 ? "sáng" : "chiều")} hôm nay \nThời gian: {existingCheckin.CheckInTime:HH:mm:ss}");
             }
 
             var attendance = new Attendance
@@ -58,7 +57,7 @@ namespace WifiCheckApp_API.Controllers
                 EmployeeId = employee.EmployeeId,
                 WorkDate = today,
                 SessionId = sessionId,
-                CheckInTime = checkInTime,
+                CheckInTime = dto.CheckIn,
                 Notes = dto.Notes,
                 WiFiId = dto.WifiId,
                 GpsId = dto.GpsId,
@@ -73,7 +72,7 @@ namespace WifiCheckApp_API.Controllers
             {
                 message = "Check-in thành công.",
                 ca = sessionId == 1 ? "Sáng" : "Chiều",
-                checkInTime = checkInTime,
+                checkInTime = dto.CheckIn,
                 attendanceId = attendance.AttendanceId
             });
         }
@@ -106,13 +105,7 @@ namespace WifiCheckApp_API.Controllers
 
             if (existingAttendance == null)
             {
-                return BadRequest($"Nhân viên chưa check-in cho ca {(sessionId == 1 ? "sáng" : "chiều")} hôm nay. Vui lòng check-in trước khi check-out.");
-            }
-
-            // Kiểm tra xem đã check-out chưa
-            if (existingAttendance.CheckOutTime != null)
-            {
-                return BadRequest($"Nhân viên đã check-out cho ca {(sessionId == 1 ? "sáng" : "chiều")} hôm nay lúc {existingAttendance.CheckOutTime:HH:mm}.");
+                return BadRequest($"Nhân viên chưa check-in cho ca {(sessionId == 1 ? "sáng" : "chiều")} hôm nay.\nVui lòng check-in trước khi check-out.");
             }
 
             // Update bản ghi hiện có với thông tin check-out
@@ -210,24 +203,155 @@ namespace WifiCheckApp_API.Controllers
             return Ok("Email hợp lệ.");
         }
 
-        [HttpGet("attendance/summary")]
-        public async Task<IActionResult> GetAttendanceSummary(int employeeId, int month, int year)
+        [HttpGet("attendances/summary-employee")]
+        public async Task<IActionResult> GetSummaryEmployee(int employeeId, int month, int year)
         {
-            //var startDate = new DateOnly(year, month, 1);
-            //var endDate = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
-            //var attendances = await _context.Attendances
-            //    .Where(a => a.EmployeeId == employeeId && a.WorkDate >= startDate && a.WorkDate <= endDate)
-            //    .ToListAsync();
+            var startDate = new DateOnly(year, month, 1);
+            var endDate = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
 
-            //var summary = new
-            //{
-            //    TotalDays = endDate.Day,
-            //    PresentDays = attendances.Count(a => a.CheckInTime.HasValue),
-            //    AbsentDays = endDate.Day - attendances.Count(a => a.CheckInTime.HasValue),
-            //    LateCheckIns = attendances.Count(a => a.CheckInStatus == "Late"),
-            //    EarlyCheckOuts = attendances.Count(a => a.CheckOutStatus == "Early")
-            //};
-            return Ok();
+            var attendances = await _context.Attendances
+                .Where(a => a.EmployeeId == employeeId && a.WorkDate >= startDate && a.WorkDate <= endDate)
+                .OrderBy(a => a.WorkDate)
+                .ThenBy(a => a.SessionId)
+                .ToListAsync();
+
+            var attendanceDict = attendances
+                .GroupBy(a => a.WorkDate)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            return Ok(CalculateAttendanceSummary(startDate, endDate, attendanceDict));
+        }
+
+        private SummaryModel CalculateAttendanceSummary(DateOnly startDate, DateOnly endDate, Dictionary<DateOnly, List<Attendance>> attendanceDict)
+        {
+            double totalWorkingDays = 0;
+            int totalLateDays = 0, totalLateMinutes = 0, totalEarlyLeaveDays = 0, totalEarlyLeaveMinutes = 0, standardWorkingDays = 0;
+            var dailyDetails = new List<DailyModel>();
+
+            // Helper function for holiday check
+            bool IsHoliday(DateOnly date)
+            {
+                if (date.DayOfWeek == DayOfWeek.Sunday) return true;
+
+                if (date.DayOfWeek == DayOfWeek.Saturday)
+                {
+                    var firstDayOfMonth = new DateOnly(date.Year, date.Month, 1);
+                    var firstSaturday = firstDayOfMonth;
+                    while (firstSaturday.DayOfWeek != DayOfWeek.Saturday)
+                        firstSaturday = firstSaturday.AddDays(1);
+
+                    if (date < firstSaturday) return false;
+                    var weekOfMonth = ((date.DayNumber - firstSaturday.DayNumber) / 7) + 1;
+                    return weekOfMonth == 1 || weekOfMonth == 3;
+                }
+                return false;
+            }
+
+            for (var date = startDate; date <= endDate; date = date.AddDays(1))
+            {
+                var isHoliday = IsHoliday(date);
+
+                if (isHoliday)
+                {
+                    var holidayType = date.DayOfWeek == DayOfWeek.Sunday ? "Sunday" : "Saturday (Week 1 or 3)";
+                    dailyDetails.Add(new DailyModel
+                    {
+                        Date = date.ToString("yyyy-MM-dd"),
+                        DayOfWeek = date.DayOfWeek.ToString(),
+                        IsHoliday = true,
+                        HolidayType = holidayType,
+                        WorkingDay = 0.0,
+                        Status = "weekend"
+                    });
+                    continue;
+                }
+
+                standardWorkingDays++;
+                var dayAttendances = attendanceDict.GetValueOrDefault(date, new List<Attendance>());
+                var morning = dayAttendances.FirstOrDefault(a => a.SessionId == 1);
+                var afternoon = dayAttendances.FirstOrDefault(a => a.SessionId == 2);
+
+                var (workingDay, lateMinutes, earlyLeaveMinutes, isLate, isEarlyLeave) = CalculateDailyWork(morning, afternoon);
+
+                totalWorkingDays += workingDay;
+                if (isLate) { totalLateDays++; totalLateMinutes += lateMinutes; }
+                if (isEarlyLeave) { totalEarlyLeaveDays++; totalEarlyLeaveMinutes += earlyLeaveMinutes; }
+
+                var status = workingDay == 0 ? "absent" : workingDay == 1.0 ? "ontime" : workingDay == 0.5 ? "earlyleave" : workingDay < 1.0 ? "late" : "ontime";
+
+                dailyDetails.Add(new DailyModel
+                {
+                    Date = date.ToString("yyyy-MM-dd"),
+                    DayOfWeek = date.DayOfWeek.ToString(),
+                    IsHoliday = false,
+                    MorningCheckIn = morning?.CheckInTime?.ToString("HH:mm"),
+                    MorningCheckOut = morning?.CheckOutTime?.ToString("HH:mm"),
+                    AfternoonCheckIn = afternoon?.CheckInTime?.ToString("HH:mm"),
+                    AfternoonCheckOut = afternoon?.CheckOutTime?.ToString("HH:mm"),
+                    WorkingDay = Math.Round(workingDay, 2),
+                    LateMinutes = lateMinutes,
+                    EarlyLeaveMinutes = earlyLeaveMinutes,
+                    Status = status
+                });
+            }
+
+            return new SummaryModel
+            {
+                Monthly = new MonthlyModel
+                {
+                    WorkingDays = Math.Round(totalWorkingDays, 2),
+                    StandardWorkingDays = standardWorkingDays,
+                    AttendanceRate = standardWorkingDays > 0 ? Math.Round((totalWorkingDays / standardWorkingDays) * 100, 2) : 0,
+                    LateDaysCount = totalLateDays,
+                    LateMinutes = totalLateMinutes,
+                    EarlyLeaveDaysCount = totalEarlyLeaveDays,
+                    EarlyCheckOutMinutes = totalEarlyLeaveMinutes,
+                    TotalDaysInMonth = DateTime.DaysInMonth(startDate.Year, startDate.Month)
+                },
+                Daily = dailyDetails
+            };
+        }
+
+        private (double workingDay, int lateMinutes, int earlyLeaveMinutes, bool isLate, bool isEarlyLeave) CalculateDailyWork(Attendance? morning, Attendance? afternoon)
+        {
+            double workingDay = 0;
+            int lateMinutes = 0, earlyLeaveMinutes = 0;
+            bool isLate = false, isEarlyLeave = false;
+
+            // Morning session
+            if (morning?.CheckInTime != null)
+            {
+                var checkIn = morning.CheckInTime.Value.TimeOfDay;
+                var expectedStart = new TimeSpan(8, 0, 0);
+                if (checkIn > expectedStart)
+                {
+                    lateMinutes = (int)(checkIn - expectedStart).TotalMinutes;
+                    isLate = true;
+                }
+                workingDay += 0.5;
+            }
+
+            // Afternoon session
+            if (afternoon?.CheckOutTime != null)
+            {
+                var checkOut = afternoon.CheckOutTime.Value.TimeOfDay;
+                var expectedEnd = new TimeSpan(17, 30, 0);
+                if (checkOut < expectedEnd)
+                {
+                    earlyLeaveMinutes = (int)(expectedEnd - checkOut).TotalMinutes;
+                    isEarlyLeave = true;
+                }
+                workingDay += 0.5;
+            }
+
+            // Special case: morning check-in + afternoon check-out only
+            if (morning?.CheckInTime != null && afternoon?.CheckOutTime != null &&
+                morning?.CheckOutTime == null && afternoon?.CheckInTime == null)
+            {
+                workingDay = 1.0;
+            }
+
+            return (Math.Min(workingDay, 1.0), lateMinutes, earlyLeaveMinutes, isLate, isEarlyLeave);
         }
 
         private DateTime GetDateTimeLocal(DateTime dateTime)

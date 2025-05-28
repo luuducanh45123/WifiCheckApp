@@ -8,34 +8,28 @@
       "sslPort": 44325
     }
   },
-    "profiles": {
-        "http": {
-            "commandName": "Project",
-            "dotnetRunMessages": true,
-            "launchBrowser": true,
-            "launchUrl": "swagger",
-            "applicationUrl": "http://localhost:5125",
-            "environmentVariables": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
-            }
-        },
-        "https": {
-            "commandName": "Project",
-            "dotnetRunMessages": true,
-            "launchBrowser": true,
-            "launchUrl": "swagger",
-            "applicationUrl": "https://0.0.0.0:5001;http://0.0.0.0:5000",
-            "environmentVariables": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
-            }
-        },
-        "IIS Express": {
-            "commandName": "IISExpress",
-            "launchBrowser": true,
-            "launchUrl": "swagger",
-            "environmentVariables": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
-            }
-        }
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "https://0.0.0.0:5125;http://0.0.0.0:5124",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "IIS Express": {
+      "commandName": "IISExpress",
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
     }
+  },
+
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=tcp:vinashoot.database.windows.net,1433;Initial Catalog=TIMELAPS;Persist Security Info=False;User ID=vinashoot;Password=SunnyDay#42;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  }
 }
