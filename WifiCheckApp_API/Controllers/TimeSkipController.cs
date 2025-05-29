@@ -655,5 +655,38 @@ namespace WifiCheckApp_API.Controllers
             });
         }
 
+        [HttpPost("submit-leave")]
+        public async Task<IActionResult> SubmitLeave([FromBody] Insert_attendance_model request)
+        {
+            bool employeeExists = await _context.Employees.AnyAsync(e => e.EmployeeId == request.EmployeeId);
+            if (!employeeExists)
+            {
+                return BadRequest($"Không tìm thấy nhân viên với EmployeeId = {request.EmployeeId}");
+            }
+
+            var attendance = new Attendance
+            {
+                EmployeeId = request.EmployeeId,
+                WorkDate = request.WorkDate,
+                Status = "Confirm",
+                Notes = request.Note,
+                LeaveType = request.Note == "Leave" ? "Paid" : "Unpaid",
+                CheckInTime = null,
+                CheckOutTime = null,
+                CheckInStatus = "Absent",
+                CheckOutStatus = "Absent"
+            };
+
+            _context.Attendances.Add(attendance);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                Message = "Chấm công đã được ghi nhận.",
+                AttendanceId = attendance.AttendanceId
+            });
+        }
+
+
     }
 }
