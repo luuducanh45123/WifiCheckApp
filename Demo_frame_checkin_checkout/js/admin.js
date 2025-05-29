@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', function () {
     userName.textContent = storedName;
   }
 
-  fetch("https://localhost:5001/api/TimeSkip/leave-types")
+  fetch("https://localhost:5125/api/TimeSkip/leave-types")
     .then(response => response.json())
     .then(data => {
       const defaultOption = document.createElement('option');
@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    fetch(`https://localhost:5001/api/TimeSkip/summary?month=${selectedMonth}`)
+    fetch(`https://localhost:5125/api/TimeSkip/summary?month=${selectedMonth}`)
       .then(response => {
         if (!response.ok) throw new Error("Lỗi khi gọi API");
         return response.json();
@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (!confirm(`Bạn chắc chắn muốn từ chối đơn của nhân viên ${empId}?`)) return;
 
-        fetch(`https://localhost:5001/api/TimeSkip/convert-unpaid`, {
+        fetch(`https://localhost:5125/api/TimeSkip/convert-unpaid`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', function () {
   confirmBtn.addEventListener('click', () => {
     const selectedMonth = monthInput.value;
 
-    fetch(`https://localhost:5001/api/TimeSkip/convert-unpaid`, {
+    fetch(`https://localhost:5125/api/TimeSkip/convert-unpaid`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

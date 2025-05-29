@@ -37,36 +37,10 @@
     <form id="updateForm">
       
       <!-- Nhóm lựa chọn nghỉ phép -->
-      <div style="margin-bottom: 15px;">
-        <label><input type="radio" name="attendanceType" value="normal" checked /> Làm việc bình thường</label><br />
-        <label><input type="radio" name="attendanceType" value="leave" /> Nghỉ phép</label><br />
-        <label><input type="radio" name="attendanceType" value="unpaid" /> Nghỉ không phép</label>
+      <div style="margin-bottom:15px;">
+        <label><input type="radio" name="note" value="Leave" /> Nghỉ phép</label><br>
+        <label><input type="radio" name="note" value="Absent" /> Nghỉ không phép</label>
       </div>
-
-      <!-- Các trường check-in/check-out -->
-      <div id="timeInputs">
-        <label>
-          Check-in sáng:
-          <input type="text" id="morningCheckIn" name="morningCheckIn" />
-        </label>
-        <br />
-        <label>
-          Check-out sáng:
-          <input type="text" id="morningCheckOut" name="morningCheckOut" />
-        </label>
-        <br />
-        <label>
-          Check-in chiều:
-          <input type="text" id="afternoonCheckIn" name="afternoonCheckIn" />
-        </label>
-        <br />
-        <label>
-          Check-out chiều:
-          <input type="text" id="afternoonCheckOut" name="afternoonCheckOut" />
-        </label>
-        <br />
-      </div>
-
       <button type="submit">Lưu</button>
     </form>
   </div>
@@ -74,18 +48,24 @@
 
 <script>
   document.addEventListener("DOMContentLoaded", function () {
-    const attendanceRadios = document.getElementsByName("attendanceType");
+    const statusRadios = document.getElementsByName("note");
     const timeInputs = document.getElementById("timeInputs");
 
-    attendanceRadios.forEach(radio => {
+    statusRadios.forEach(radio => {
       radio.addEventListener("change", () => {
-        if (radio.value === "normal" && radio.checked) {
+        if (radio.value === "Normal" && radio.checked) {
           timeInputs.style.display = "block";
         } else if (radio.checked) {
           timeInputs.style.display = "none";
         }
       });
     });
+
+    // Mặc định hiển thị đúng trạng thái khi load lại modal
+    const checkedRadio = document.querySelector('input[name="note"]:checked');
+    if (checkedRadio?.value !== "Normal") {
+      timeInputs.style.display = "none";
+    }
   });
 </script>
 
