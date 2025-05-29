@@ -16,5 +16,8 @@
         public int EarlyLeaveMinutes { get; set; } // Number of minutes left early, 0 if not applicable
         public string Status { get; set; } // "OnTime", "Late", "EarlyLeave", "Absent", "Weekend", etc.
         public string? Note { get; set; } // Optional note for the day, e.g., "Sick Leave", "Vacation", etc.
+
+        public string? LeaveType { get; set; } // Type of leave if applicable, e.g., "Sick Leave", "Annual Leave", etc.
+        public string? LeaveStatus { get; set; } // Reason for leave if applicable, e.g., "Medical Appointment", "Family Emergency", etc.
     }
 }
