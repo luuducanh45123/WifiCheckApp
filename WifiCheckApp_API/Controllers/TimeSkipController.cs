@@ -223,6 +223,25 @@ namespace WifiCheckApp_API.Controllers
             return Ok(CalculateAttendanceSummary(startDate, endDate, attendanceDict));
         }
 
+        string GetLeaveStatus(Attendance? morning, Attendance? afternoon)
+        {
+            // Kiểm tra nghỉ phép có lương đã được duyệt
+            bool hasPaidLeave = (morning?.LeaveType == "Paid" && morning?.Status == "Approve") ||
+                               (afternoon?.LeaveType == "Paid" && afternoon?.Status == "Approve");
+
+            if (hasPaidLeave) return "paid";
+
+            // Kiểm tra nghỉ phép không lương hoặc nghỉ phép bị từ chối
+            bool hasUnpaidOrRejectedLeave = (morning?.LeaveType == "Unpaid") ||
+                                           (afternoon?.LeaveType == "Unpaid") ||
+                                           (morning?.LeaveType == "Paid" && morning?.Status == "Reject") ||
+                                           (afternoon?.LeaveType == "Paid" && afternoon?.Status == "Reject");
+
+            if (hasUnpaidOrRejectedLeave) return "unpaid";
+
+            return null; // Không có nghỉ phép
+        }
+
         private SummaryModel CalculateAttendanceSummary(DateOnly startDate, DateOnly endDate, Dictionary<DateOnly, List<Attendance>> attendanceDict)
         {
             double totalWorkingDays = 0;
@@ -247,25 +266,7 @@ namespace WifiCheckApp_API.Controllers
                 return false;
             }
 
-            // Helper function to determine leave status
-            string GetLeaveStatus(Attendance? morning, Attendance? afternoon)
-            {
-                // Kiểm tra nghỉ phép có lương đã được duyệt
-                bool hasPaidLeave = (morning?.LeaveType == "Paid" && morning?.Status == "Approve") ||
-                                   (afternoon?.LeaveType == "Paid" && afternoon?.Status == "Approve");
 
-                if (hasPaidLeave) return "paid";
-
-                // Kiểm tra nghỉ phép không lương hoặc nghỉ phép bị từ chối
-                bool hasUnpaidOrRejectedLeave = (morning?.LeaveType == "Unpaid") ||
-                                               (afternoon?.LeaveType == "Unpaid") ||
-                                               (morning?.LeaveType == "Paid" && morning?.Status == "Reject") ||
-                                               (afternoon?.LeaveType == "Paid" && afternoon?.Status == "Reject");
-
-                if (hasUnpaidOrRejectedLeave) return "unpaid";
-
-                return null; // Không có nghỉ phép
-            }
 
             for (var date = startDate; date <= endDate; date = date.AddDays(1))
             {
@@ -293,7 +294,7 @@ namespace WifiCheckApp_API.Controllers
                 var leaveStatus = GetLeaveStatus(morning, afternoon);
                 var dailyModel = CreateDailyModel(date, morning, afternoon, leaveStatus);
 
-                // Cập nhật tổng kết nghỉ phép
+                // Cập nhật tổng kết nghỉ phép (chỉ để thống kê)
                 if (!string.IsNullOrEmpty(leaveStatus))
                 {
                     totalDaysOff++;
@@ -358,143 +359,70 @@ namespace WifiCheckApp_API.Controllers
                 LeaveStatus = !string.IsNullOrEmpty(leaveStatus) ? (morning?.Status ?? afternoon?.Status) : null
             };
 
+            // Luôn tính công dựa trên log chấm công, bỏ qua LeaveType
+            var (workingDay, lateMinutes, earlyLeaveMinutes) = CalculateDailyWork(morning, afternoon);
+
+            dailyModel.WorkingDay = Math.Round(workingDay, 2);
+            dailyModel.LateMinutes = lateMinutes;
+            dailyModel.EarlyLeaveMinutes = earlyLeaveMinutes;
+
+            // Status ưu tiên theo leave status nếu có (để hiển thị), nhưng không ảnh hưởng ngày công
             if (!string.IsNullOrEmpty(leaveStatus))
             {
-                // Có nghỉ phép
-                dailyModel.WorkingDay = leaveStatus == "paid" ? 1.0 : 0.0;
-                dailyModel.LateMinutes = 0;
-                dailyModel.EarlyLeaveMinutes = 0;
                 dailyModel.Status = leaveStatus;
             }
             else
             {
-                // Không có nghỉ phép, tính toán bình thường
-                var (workingDay, lateMinutes, earlyLeaveMinutes, isLate, isEarlyLeave) = CalculateDailyWork(morning, afternoon);
-
-                dailyModel.WorkingDay = Math.Round(workingDay, 2);
-                dailyModel.LateMinutes = lateMinutes;
-                dailyModel.EarlyLeaveMinutes = earlyLeaveMinutes;
                 dailyModel.Status = workingDay == 0 ? "absent" :
                                    workingDay == 1.0 ? "ontime" :
-                                   workingDay == 0.5 ? "earlyleave" :
-                                   workingDay < 1.0 ? "late" : "ontime";
+                                   workingDay == 0.5 ? "halfday" : "ontime";
             }
 
             return dailyModel;
         }
 
-        private (double workingDay, int lateMinutes, int earlyLeaveMinutes, bool isLate, bool isEarlyLeave) CalculateDailyWork(Attendance? morning, Attendance? afternoon)
+        private (double workingDay, int lateMinutes, int earlyLeaveMinutes) CalculateDailyWork(Attendance? morning, Attendance? afternoon)
         {
             double workingDay = 0;
             int lateMinutes = 0, earlyLeaveMinutes = 0;
-            bool isLate = false, isEarlyLeave = false;
 
-            // Kiểm tra nghỉ phép có lương đã được duyệt
-            bool hasPaidLeave = (morning?.LeaveType == "Paid" && morning?.Status == "Approve") ||
-                               (afternoon?.LeaveType == "Paid" && afternoon?.Status == "Approve");
-
-            if (hasPaidLeave)
+            // Tính session buổi sáng
+            if (morning?.CheckInTime != null || morning?.CheckOutTime != null)
             {
-                return (1.0, 0, 0, false, false); // Tính đủ công, không late/early leave
-            }
-
-            // Thời gian làm việc chuẩn (8 giờ = 480 phút)
-            const int standardWorkingMinutes = 480;
-            int actualWorkingMinutes = 0;
-
-            // Morning session
-            if (morning?.CheckInTime != null)
-            {
-                var checkIn = morning.CheckInTime.Value.TimeOfDay;
-                var expectedStart = new TimeSpan(8, 0, 0);
-                var morningEnd = new TimeSpan(12, 0, 0); // Giả sử buổi sáng kết thúc 12h
-
-                if (checkIn > expectedStart)
-                {
-                    lateMinutes = (int)(checkIn - expectedStart).TotalMinutes;
-                    isLate = true;
-                }
-
-                // Tính thời gian làm việc buổi sáng thực tế
-                var effectiveStart = checkIn > expectedStart ? checkIn : expectedStart;
-                var morningWorkMinutes = (int)(morningEnd - effectiveStart).TotalMinutes;
-                actualWorkingMinutes += Math.Max(0, morningWorkMinutes);
-
+                // Có log chấm công buổi sáng
                 workingDay += 0.5;
-            }
-            else if (morning?.LeaveType == "Paid" && morning?.Status == "Approve")
-            {
-                // Nghỉ phép có lương buổi sáng - tính 0.5 công
-                workingDay += 0.5;
-                actualWorkingMinutes += 240; // 4 tiếng buổi sáng
-            }
 
-            // Afternoon session
-            if (afternoon?.CheckOutTime != null)
-            {
-                var checkOut = afternoon.CheckOutTime.Value.TimeOfDay;
-                var expectedEnd = new TimeSpan(17, 30, 0);
-                var afternoonStart = new TimeSpan(13, 30, 0); // Giả sử buổi chiều bắt đầu 13h30
-
-                if (checkOut < expectedEnd)
+                // Tính late cho buổi sáng (nếu cần)
+                if (morning?.CheckInTime != null)
                 {
-                    earlyLeaveMinutes = (int)(expectedEnd - checkOut).TotalMinutes;
-                    isEarlyLeave = true;
+                    var checkIn = morning.CheckInTime.Value.TimeOfDay;
+                    var expectedStart = new TimeSpan(8, 0, 0);
+                    if (checkIn > expectedStart)
+                    {
+                        lateMinutes = (int)(checkIn - expectedStart).TotalMinutes;
+                    }
                 }
+            }
 
-                // Tính thời gian làm việc buổi chiều thực tế
-                var effectiveEnd = checkOut < expectedEnd ? checkOut : expectedEnd;
-                var afternoonWorkMinutes = (int)(effectiveEnd - afternoonStart).TotalMinutes;
-                actualWorkingMinutes += Math.Max(0, afternoonWorkMinutes);
-
+            // Tính session buổi chiều
+            if (afternoon?.CheckInTime != null || afternoon?.CheckOutTime != null)
+            {
+                // Có log chấm công buổi chiều
                 workingDay += 0.5;
-            }
-            else if (afternoon?.LeaveType == "Paid" && afternoon?.Status == "Approve")
-            {
-                // Nghỉ phép có lương buổi chiều - tính 0.5 công
-                workingDay += 0.5;
-                actualWorkingMinutes += 240; // 4 tiếng buổi chiều
-            }
 
-            // Special case: morning check-in + afternoon check-out only (ca nguyên ngày)
-            if (morning?.CheckInTime != null && afternoon?.CheckOutTime != null &&
-                morning?.CheckOutTime == null && afternoon?.CheckInTime == null)
-            {
-                var checkIn = morning.CheckInTime.Value.TimeOfDay;
-                var checkOut = afternoon.CheckOutTime.Value.TimeOfDay;
-                var expectedStart = new TimeSpan(8, 0, 0);
-                var expectedEnd = new TimeSpan(17, 30, 0);
-
-                // Tính late và early leave
-                if (checkIn > expectedStart)
+                // Tính early leave cho buổi chiều (nếu cần)
+                if (afternoon?.CheckOutTime != null)
                 {
-                    lateMinutes = (int)(checkIn - expectedStart).TotalMinutes;
-                    isLate = true;
+                    var checkOut = afternoon.CheckOutTime.Value.TimeOfDay;
+                    var expectedEnd = new TimeSpan(17, 30, 0);
+                    if (checkOut < expectedEnd)
+                    {
+                        earlyLeaveMinutes = (int)(expectedEnd - checkOut).TotalMinutes;
+                    }
                 }
-
-                if (checkOut < expectedEnd)
-                {
-                    earlyLeaveMinutes = (int)(expectedEnd - checkOut).TotalMinutes;
-                    isEarlyLeave = true;
-                }
-
-                // Tính thời gian làm việc thực tế (trừ nghỉ trưa 1.5h)
-                var effectiveStart = checkIn > expectedStart ? checkIn : expectedStart;
-                var effectiveEnd = checkOut < expectedEnd ? checkOut : expectedEnd;
-                var totalMinutes = (int)(effectiveEnd - effectiveStart).TotalMinutes;
-                actualWorkingMinutes = Math.Max(0, totalMinutes - 90); // Trừ 90 phút nghỉ trưa
-
-                workingDay = 1.0;
             }
 
-            // Tính ngày công dựa trên thời gian làm việc thực tế
-            if (actualWorkingMinutes > 0)
-            {
-                double actualWorkingDay = (double)actualWorkingMinutes / standardWorkingMinutes;
-                workingDay = Math.Min(workingDay, actualWorkingDay);
-            }
-
-            return (Math.Min(workingDay, 1.0), lateMinutes, earlyLeaveMinutes, isLate, isEarlyLeave);
+            return (workingDay, lateMinutes, earlyLeaveMinutes);
         }
 
         private DateTime GetDateTimeLocal(DateTime dateTime)
