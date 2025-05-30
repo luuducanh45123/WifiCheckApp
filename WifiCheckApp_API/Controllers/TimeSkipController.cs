@@ -242,6 +242,27 @@ namespace WifiCheckApp_API.Controllers
             return null; // Không có nghỉ phép
         }
 
+        private bool IsWorkingDay(DateOnly date)
+        {
+            // Loại trừ chủ nhật
+            if (date.DayOfWeek == DayOfWeek.Sunday)
+                return false;
+
+            // Loại trừ thứ 7 tuần 1 và 3
+            if (date.DayOfWeek == DayOfWeek.Saturday)
+            {
+                // Tính tuần thứ mấy trong tháng
+                int dayOfMonth = date.Day;
+                int weekOfMonth = ((dayOfMonth - 1) / 7) + 1;
+
+                // Loại trừ thứ 7 tuần 1 và 3
+                if (weekOfMonth == 1 || weekOfMonth == 3)
+                    return false;
+            }
+
+            return true;
+        }
+
         private SummaryModel CalculateAttendanceSummary(DateOnly startDate, DateOnly endDate, Dictionary<DateOnly, List<Attendance>> attendanceDict)
         {
             double totalWorkingDays = 0;
@@ -249,64 +270,38 @@ namespace WifiCheckApp_API.Controllers
             int totalDaysOff = 0, totalDaysOffWithoutReason = 0, totalDaysOffWithReason = 0;
             var dailyDetails = new List<DailyModel>();
 
-            // Helper function for holiday check
-            bool IsHoliday(DateOnly date)
-            {
-                if (date.DayOfWeek == DayOfWeek.Sunday) return true;
-                if (date.DayOfWeek == DayOfWeek.Saturday)
-                {
-                    var firstDayOfMonth = new DateOnly(date.Year, date.Month, 1);
-                    var firstSaturday = firstDayOfMonth;
-                    while (firstSaturday.DayOfWeek != DayOfWeek.Saturday)
-                        firstSaturday = firstSaturday.AddDays(1);
-                    if (date < firstSaturday) return false;
-                    var weekOfMonth = ((date.DayNumber - firstSaturday.DayNumber) / 7) + 1;
-                    return weekOfMonth == 1 || weekOfMonth == 3;
-                }
-                return false;
-            }
-
-
-
             for (var date = startDate; date <= endDate; date = date.AddDays(1))
             {
-                var isHoliday = IsHoliday(date);
-                if (isHoliday)
+                // Chỉ tính ngày làm việc chuẩn cho những ngày không phải cuối tuần loại trừ
+                bool isWorkingDay = IsWorkingDay(date);
+                if (isWorkingDay)
                 {
-                    var holidayType = date.DayOfWeek == DayOfWeek.Sunday ? "Sunday" : "Saturday (Week 1 or 3)";
-                    dailyDetails.Add(new DailyModel
-                    {
-                        Date = date.ToString("yyyy-MM-dd"),
-                        DayOfWeek = date.DayOfWeek.ToString(),
-                        IsHoliday = true,
-                        HolidayType = holidayType,
-                        WorkingDay = 0.0,
-                        Status = "weekend"
-                    });
-                    continue;
+                    standardWorkingDays++;
                 }
 
-                standardWorkingDays++;
                 var dayAttendances = attendanceDict.GetValueOrDefault(date, new List<Attendance>());
                 var morning = dayAttendances.FirstOrDefault(a => a.SessionId == 1);
                 var afternoon = dayAttendances.FirstOrDefault(a => a.SessionId == 2);
 
                 var leaveStatus = GetLeaveStatus(morning, afternoon);
-                var dailyModel = CreateDailyModel(date, morning, afternoon, leaveStatus);
+                var dailyModel = CreateDailyModel(date, morning, afternoon, leaveStatus, isWorkingDay);
 
-                // Cập nhật tổng kết nghỉ phép (chỉ để thống kê)
-                if (!string.IsNullOrEmpty(leaveStatus))
+                // Cập nhật tổng kết nghỉ phép (chỉ để thống kê cho những ngày làm việc)
+                if (isWorkingDay)
                 {
-                    totalDaysOff++;
-                    if (leaveStatus == "paid")
-                        totalDaysOffWithReason++;
-                    else
+                    if (!string.IsNullOrEmpty(leaveStatus))
+                    {
+                        totalDaysOff++;
+                        if (leaveStatus == "paid")
+                            totalDaysOffWithReason++;
+                        else
+                            totalDaysOffWithoutReason++;
+                    }
+                    else if (dailyModel.Status == "absent")
+                    {
+                        totalDaysOff++;
                         totalDaysOffWithoutReason++;
-                }
-                else if (dailyModel.Status == "absent")
-                {
-                    totalDaysOff++;
-                    totalDaysOffWithoutReason++;
+                    }
                 }
 
                 // Cập nhật tổng kết
@@ -345,13 +340,13 @@ namespace WifiCheckApp_API.Controllers
             };
         }
 
-        private DailyModel CreateDailyModel(DateOnly date, Attendance? morning, Attendance? afternoon, string leaveStatus)
+        private DailyModel CreateDailyModel(DateOnly date, Attendance? morning, Attendance? afternoon, string leaveStatus, bool isWorkingDay)
         {
             var dailyModel = new DailyModel
             {
                 Date = date.ToString("yyyy-MM-dd"),
                 DayOfWeek = date.DayOfWeek.ToString(),
-                IsHoliday = false,
+                IsHoliday = !isWorkingDay, // Đánh dấu những ngày không làm việc là holiday
                 MorningCheckIn = morning?.CheckInTime?.ToString("HH:mm"),
                 MorningCheckOut = morning?.CheckOutTime?.ToString("HH:mm"),
                 AfternoonCheckIn = afternoon?.CheckInTime?.ToString("HH:mm"),
@@ -362,20 +357,30 @@ namespace WifiCheckApp_API.Controllers
             // Luôn tính công dựa trên log chấm công, bỏ qua LeaveType
             var (workingDay, lateMinutes, earlyLeaveMinutes) = CalculateDailyWork(morning, afternoon);
 
-            dailyModel.WorkingDay = Math.Round(workingDay, 2);
-            dailyModel.LateMinutes = lateMinutes;
-            dailyModel.EarlyLeaveMinutes = earlyLeaveMinutes;
-
-            // Status ưu tiên theo leave status nếu có (để hiển thị), nhưng không ảnh hưởng ngày công
-            if (!string.IsNullOrEmpty(leaveStatus))
+            // Đối với những ngày không phải ngày làm việc, không tính công và không tính vắng mặt
+            if (!isWorkingDay)
             {
-                dailyModel.Status = leaveStatus;
+                dailyModel.WorkingDay = 0;
+                dailyModel.LateMinutes = 0;
+                dailyModel.EarlyLeaveMinutes = 0;
             }
             else
             {
-                dailyModel.Status = workingDay == 0 ? "absent" :
-                                   workingDay == 1.0 ? "ontime" :
-                                   workingDay == 0.5 ? "halfday" : "ontime";
+                dailyModel.WorkingDay = Math.Round(workingDay, 2);
+                dailyModel.LateMinutes = lateMinutes;
+                dailyModel.EarlyLeaveMinutes = earlyLeaveMinutes;
+
+                // Status ưu tiên theo leave status nếu có (để hiển thị), nhưng không ảnh hưởng ngày công
+                if (!string.IsNullOrEmpty(leaveStatus))
+                {
+                    dailyModel.Status = leaveStatus;
+                }
+                else
+                {
+                    dailyModel.Status = workingDay == 0 ? "absent" :
+                                       workingDay == 1.0 ? "ontime" :
+                                       workingDay == 0.5 ? "halfday" : "ontime";
+                }
             }
 
             return dailyModel;
