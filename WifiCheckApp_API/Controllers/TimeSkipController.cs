@@ -135,7 +135,7 @@ namespace WifiCheckApp_API.Controllers
             var totalDays = DateTime.DaysInMonth(year, month);
             var startDate = new DateOnly(year, month, 1);
             var endDate = new DateOnly(year, month, totalDays);
-            var today = DateOnly.FromDateTime(GetDateTimeLocal(DateTime.Now));
+            var today = DateOnly.FromDateTime(DateTime.Now);
 
             // Lấy toàn bộ dữ liệu chấm công trong tháng
             var attendances = await _context.Attendances

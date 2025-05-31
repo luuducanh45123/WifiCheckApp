@@ -137,7 +137,7 @@ namespace WifiCheckApp_API.Controllers
                     return Unauthorized("Tài khoản không tồn tại hoặc đã bị khóa.");
                 }
 
-                if (request.Password != user.Password)
+                if (!VerifyPassword(request.Password, user.Password))
                 {
                     return Unauthorized("Mật khẩu không đúng.");
                 }
@@ -164,25 +164,25 @@ namespace WifiCheckApp_API.Controllers
         }
 
         // Updated method using BCrypt for password verification
-        //private bool VerifyPassword(string plainPassword, string hashedPassword)
-        //{
-        //    try
-        //    {
-        //        return BCrypt.Net.BCrypt.Verify(plainPassword, hashedPassword);
-        //    }
-        //    catch (Exception)
-        //    {
-        //        return false;
-        //    }
-        //}
+        private bool VerifyPassword(string plainPassword, string hashedPassword)
+        {
+            try
+            {
+                return BCrypt.Net.BCrypt.Verify(plainPassword, hashedPassword);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
 
         //// Updated method using BCrypt for password hashing
-        //private string HashPassword(string password)
-        //{
-        //    // Generate salt and hash password with BCrypt
-        //    // WorkFactor 12 provides good security balance between performance and security
-        //    return BCrypt.Net.BCrypt.HashPassword(password, 12);
-        //}
+        private string HashPassword(string password)
+        {
+            // Generate salt and hash password with BCrypt
+            // WorkFactor 12 provides good security balance between performance and security
+            return BCrypt.Net.BCrypt.HashPassword(password, 12);
+        }
 
         [HttpGet("GetUserInfo")]
         public async Task<IActionResult> GetUserInfo(int employeeId)
@@ -215,6 +215,30 @@ namespace WifiCheckApp_API.Controllers
                 Position = user.Employee?.Position,
                 Role = roleName
             });
+        }
+
+        [HttpPost("ChangePassword")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.OldPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+            {
+                return BadRequest("Mật khẩu cũ và mật khẩu mới không được để trống.");
+            }
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.IsActive == true && u.UserId == request.UserId);
+            if (user == null)
+            {
+                return Unauthorized("Tài khoản không tồn tại hoặc đã bị khóa.");
+            }
+            // Kiểm tra mật khẩu cũ
+            if (!VerifyPassword(request.OldPassword, user.Password))
+            {
+                return Unauthorized("Mật khẩu cũ không đúng.");
+            }
+            // Mã hóa mật khẩu mới
+            user.Password = HashPassword(request.NewPassword);
+            _context.Users.Update(user);
+            await _context.SaveChangesAsync();
+            return Ok("Đổi mật khẩu thành công.");
         }
     }
 }
