@@ -1,6 +1,7 @@
 ﻿using System.Data;
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Http;
@@ -240,5 +241,86 @@ namespace WifiCheckApp_API.Controllers
             await _context.SaveChangesAsync();
             return Ok("Đổi mật khẩu thành công.");
         }
+
+        [HttpPost("ChangeInfo")]
+        public async Task<IActionResult> ChangeInfo([FromBody] ChangeInfoRequest request)
+        {
+            if (request == null || request.EmployeeId <= 0)
+            {
+                return BadRequest("Thông tin không hợp lệ.");
+            }
+            var Employees = await _context.Employees
+                .FirstOrDefaultAsync(u => u.EmployeeId == request.EmployeeId && u.IsActive == true);
+            if (Employees == null)
+            {
+                return NotFound("Không tìm thấy người dùng với EmployeeId này.");
+            }
+            // Cập nhật thông tin nhân viên
+            Employees.FullName = request.FullName ?? Employees.FullName;
+            Employees.Gender = request.Gender ?? Employees.Gender;
+            Employees.DateOfBirth = request.DateOfBirth ?? Employees.DateOfBirth;
+            Employees.Email = request.Email ?? Employees.Email;
+            Employees.Phone = request.Phone ?? Employees.Phone;
+            _context.Employees.Update(Employees);
+            await _context.SaveChangesAsync();
+            return Ok("Cập nhật thông tin thành công.");
+        }
+
+        public class UserCreateDto
+        {
+            public string Username { get; set; }
+            public string Email { get; set; }
+        }
+
+
+        [HttpPost("CreateMultiUser")]
+        public async Task<IActionResult> CreateMultiUser([FromBody] List<UserCreateDto> users)
+        {
+            if (users == null || users.Count == 0)
+            {
+                return BadRequest("Danh sách người dùng không được để trống.");
+            }
+
+            var emails = users.Select(u => u.Email).ToList();
+
+            var existingUsers = await _context.Users
+                .Where(u => emails.Contains(u.Employee.Email) && u.IsActive == true)
+                .ToListAsync();
+
+            if (existingUsers.Count > 0)
+            {
+                return BadRequest("Một hoặc nhiều email đã tồn tại trong hệ thống.");
+            }
+
+            foreach (var userDto in users)
+            {
+                var employee = new Employee
+                {
+                    FullName = userDto.Username,
+                    Email = userDto.Email,
+                    IsActive = true
+                };
+
+                _context.Employees.Add(employee);
+                await _context.SaveChangesAsync();
+
+                var user = new User
+                {
+                    Username = userDto.Username,
+                    Password = HashPassword("123456"),
+                    RoleId = 2,
+                    EmployeeId = employee.EmployeeId,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.Users.Add(user);
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok("Tạo người dùng thành công.");
+        }
+
     }
 }
