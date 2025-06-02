@@ -65,11 +65,11 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UsePathBase("/AppApi");
+    app.UsePathBase("/WebApi");
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/AppApi/swagger/v1/swagger.json", "Attendance API V1");
+        c.SwaggerEndpoint("/WebApi/swagger/v1/swagger.json", "Attendance API V1");
         c.RoutePrefix = "";
     });
 }
