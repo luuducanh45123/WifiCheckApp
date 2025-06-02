@@ -36,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("username", data.username || "");
       localStorage.setItem("role", data.role || "");
       localStorage.setItem("fullName", data.fullName || "");
+      localStorage.setItem("userId", String(data.userId || ""));
 
       //  Chuyển employeeId thành chuỗi nếu là số
       if (data.employeeId !== undefined && data.employeeId !== null) {

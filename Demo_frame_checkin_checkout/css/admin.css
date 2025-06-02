@@ -1,154 +1,128 @@
+/* ==== Phần chung: Reset và body ==== */
 body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0;
-      padding: 0;
-      background-color: #f2f4f8;
-    }
-
-    .header-call {
-      background-color: #ffffff;
-      border-bottom: 1px solid #ddd;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 24px;
-    }
-
-    .header-left {
-      font-size: 20px;
-      font-weight: bold;
-      color: #007bff;
-    }
-
-    .search-bar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .search-bar label {
-      font-size: 14px;
-    }
-
-    .search-bar input,
-    .search-bar select,
-    .search-bar button {
-      padding: 6px 10px;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-
-    .search-bar input,
-    .search-bar select {
-      border: 1px solid #ccc;
-    }
-
-    .search-bar button {
-      border: none;
-      color: white;
-      cursor: pointer;
-    }
-
-    .btn-search {
-      background-color: #007bff;
-    }
-
-    .btn-search:hover {
-      background-color: #0056b3;
-    }
-
-    .btn-export {
-      background-color: #28a745;
-    }
-
-    .btn-export:hover {
-      background-color: #218838;
-    }
-
-    .table-container {
-      padding: 24px;
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background-color: white;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-      border-radius: 6px;
-    }
-
-    th, td {
-      padding: 12px 16px;
-      text-align: left;
-      border-bottom: 1px solid #eee;
-      font-size: 14px;
-    }
-
-    thead {
-      background-color: #e7f1ff;
-      font-weight: bold;
-      color: #333;
-    }
-
-    @media (max-width: 768px) {
-      .search-bar {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      table {
-        font-size: 12px;
-      }
-    }
-
-.user-dropdown {
-  display: inline-block;
-  position: relative;
-  margin-left: 25px;
-  font-size: 14px;
-  color: #333;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f2f4f8;
 }
 
-.user-name {
-  cursor: pointer;
-  padding: 6px 10px;
+/* ==== Phần filter / tìm kiếm ==== */
+.header-call {
   background-color: #ffffff;
-  border-radius: 6px;
-  transition: background 0.2s;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
 }
 
-.user-name:hover {
-  background-color: #f0f0f0;
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.dropdown-menu {
-  display: none;
-  position: absolute;
-  top: 32px;
-  right: 0;
-  background: white;
-  color: black;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-  z-index: 999;
-  min-width: 120px;
-}
-
-.dropdown-menu a {
-  display: block;
-  padding: 10px 16px;
-  text-decoration: none;
-  color: #333;
+.search-bar label {
   font-size: 14px;
 }
 
-.dropdown-menu a:hover {
-  background-color: #f2f2f2;
+.search-bar input,
+.search-bar select,
+.search-bar button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
 }
 
-/* CSS của pup-up */
+.search-bar input,
+.search-bar select {
+  border: 1px solid #ccc;
+}
+
+.search-bar button {
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.btn-search {
+  background-color: #007bff;
+}
+
+.btn-search:hover {
+  background-color: #0056b3;
+}
+
+.btn-export {
+  background-color: #28a745;
+}
+
+/* css cho button thay đổi */
+.btn-change {
+  background-color: #ff9800;     /* Màu cam nổi bật */
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin-left: 8px; /* Cách nút trước một khoảng */
+}
+
+.btn-change:hover {
+  background-color: #fb8c00;     /* Màu hover đậm hơn một chút */
+}
+
+.btn-export:hover {
+  background-color: #218838;
+}
+
+/* ==== Phần bảng ==== */
+.table-container {
+  padding: 24px;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: white;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  border-radius: 6px;
+}
+
+/* Chú ý: Để bo tròn bảng, chúng ta thường thêm border-radius cho <table> 
+   nhưng cần thận trọng: một số trình duyệt sẽ không bo tròn 4 góc nếu thẻ <thead> hoặc <tbody> che hết 
+   (nếu bạn gặp vấn đề, hãy cân nhắc bo tròn <th> ở góc hoặc dùng thêm wrapper). */
+
+th, td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  font-size: 14px;
+}
+
+thead {
+  background-color: #e7f1ff;
+  font-weight: bold;
+  color: #333;
+}
+
+/* Khi màn hình nhỏ hơn 768px, thu nhỏ font bảng và xếp cột filter theo cột */
+@media (max-width: 768px) {
+  .search-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  table {
+    font-size: 12px;
+  }
+}
+
+/* ==== Phần popup ==== */
 .popup-overlay {
   position: fixed;
   top: 0;
@@ -226,7 +200,7 @@ body {
   display: none;
 }
 
-/* Animation */
+/* ==== Animation ==== */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -243,8 +217,10 @@ body {
   }
 }
 
-/* css hai button trong table */
-.approve-btn, .reject-btn {
+/* ==== Các nút hành động trong table (approve, reject, adjust) ==== */
+.approve-btn,
+.reject-btn,
+.adjust-btn {
   padding: 6px 12px;
   margin: 4px 4px 0 0;
   border: none;
@@ -262,7 +238,17 @@ body {
 }
 
 .approve-btn:hover {
-  background-color: #45a049;
+  background-color: #a0c252;
+  transform: scale(1.05);
+}
+
+.adjust-btn {
+  background-color: #cfcc1f;
+  color: white;
+}
+
+.adjust-btn:hover {
+  background-color: #ccc01b;
   transform: scale(1.05);
 }
 
