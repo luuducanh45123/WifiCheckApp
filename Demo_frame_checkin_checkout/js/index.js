@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const employeeIdRaw = localStorage.getItem("employeeId");
   const employeeId = employeeIdRaw ? parseInt(employeeIdRaw) : null;
 
+  
+
   if (!employeeId) {
     console.error("employeeId không hợp lệ hoặc chưa được lưu trong localStorage");
     alert("Không tìm thấy thông tin nhân viên. Vui lòng đăng nhập lại.");
