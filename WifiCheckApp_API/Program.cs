@@ -69,7 +69,7 @@ else
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Attendance API V1");
+        c.SwaggerEndpoint("/AppApi/swagger/v1/swagger.json", "Attendance API V1");
         c.RoutePrefix = "";
     });
 }
