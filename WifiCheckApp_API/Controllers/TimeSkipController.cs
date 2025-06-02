@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using WifiCheckApp_API.Models;
 using WifiCheckApp_API.ViewModels;
 using System.Collections.Generic;
+using Azure.Core;
 
 namespace WifiCheckApp_API.Controllers
 {
@@ -681,14 +682,37 @@ namespace WifiCheckApp_API.Controllers
         }
 
         [HttpGet("by-date")]
-        public IActionResult GetAttendanceByDate([FromQuery] string date)
+        public IActionResult GetAttendanceByDate([FromQuery] string? date)
         {
-            if (!DateTime.TryParseExact(date, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var targetDate))
-            {
-                return BadRequest("Tham số 'date' không hợp lệ. Định dạng đúng: yyyy-MM-dd");
-            }
+            DateTime targetDate;
+            DateOnly targetDateOnly;
 
-            var dateOnly = DateOnly.FromDateTime(targetDate);
+            if (string.IsNullOrWhiteSpace(date))
+            {
+                // Không truyền date → tự lấy ngày WorkDate mới nhất có trong dữ liệu
+                var latestWorkDate = _context.Attendances
+                    .OrderByDescending(a => a.WorkDate)
+                    .Select(a => a.WorkDate)
+                    .FirstOrDefault();
+
+                if (latestWorkDate == default)
+                {
+                    return NotFound("Không có dữ liệu chấm công nào trong hệ thống.");
+                }
+
+                targetDateOnly = latestWorkDate;
+                targetDate = latestWorkDate.ToDateTime(TimeOnly.MinValue); // để dùng targetDate.ToString("yyyy-MM-dd")
+            }
+            else
+            {
+                // Logic cũ: parse date từ FE
+                if (!DateTime.TryParseExact(date, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out targetDate))
+                {
+                    return BadRequest("Tham số 'date' không hợp lệ. Định dạng đúng: yyyy-MM-dd");
+                }
+
+                targetDateOnly = DateOnly.FromDateTime(targetDate);
+            }
 
             var employees = _context.Employees
                 .Where(e => e.IsActive == true)
@@ -698,7 +722,7 @@ namespace WifiCheckApp_API.Controllers
                 }).ToList();
 
             var attendanceRecords = _context.Attendances
-                .Where(a => a.WorkDate == dateOnly)
+                .Where(a => a.WorkDate == targetDateOnly)
                 .Include(a => a.Session)
                 .ToList();
 
@@ -718,10 +742,15 @@ namespace WifiCheckApp_API.Controllers
                 result.Add(new
                 {
                     STT = stt++,
+                    EmployeeId = emp.EmployeeId,
                     EmployeeName = emp.FullName,
                     Date = targetDate.ToString("yyyy-MM-dd"),
+
+                    AttendanceIdMorning = morning?.AttendanceId,
                     CheckInMorning = morning?.CheckInTime?.ToString("HH:mm") ?? "",
                     CheckOutMorning = morning?.CheckOutTime?.ToString("HH:mm") ?? "",
+
+                    AttendanceIdAfternoon = afternoon?.AttendanceId,
                     CheckInAfternoon = afternoon?.CheckInTime?.ToString("HH:mm") ?? "",
                     CheckOutAfternoon = afternoon?.CheckOutTime?.ToString("HH:mm") ?? ""
                 });
@@ -734,62 +763,100 @@ namespace WifiCheckApp_API.Controllers
         [HttpPost("adjust")]
         public async Task<IActionResult> AdjustAttendance([FromBody] Save_ChangeTimeZone_model dto)
         {
-            var attendance = await _context.Attendances.FindAsync(dto.AttendanceId);
-            if (attendance == null)
-                return NotFound("Không tìm thấy chấm công");
-
-            bool isChanged = false;
-            string oldCheckIn = attendance.CheckInTime?.ToString("HH:mm");
-            string oldCheckOut = attendance.CheckOutTime?.ToString("HH:mm");
-
-            string? newCheckIn = dto.CheckInTime?.ToString("HH:mm");
-            string? newCheckOut = dto.CheckOutTime?.ToString("HH:mm");
-
-            // Tạo lịch sử thay đổi nếu có thay đổi
-            var history = new AttendanceHistory
+            // Nếu AttendanceId được truyền: thực hiện cập nhật như cũ
+            if (dto.AttendanceId > 0)
             {
-                AttendanceId = attendance.AttendanceId,
-                ActionType = "Update",
-                PerformedBy = dto.PerformedBy,
-                PerformedAt = DateTime.Now,
-                OldValue = null,
-                NewValue = null
-            };
+                var attendance = await _context.Attendances.FindAsync(dto.AttendanceId);
+                if (attendance == null)
+                    return NotFound("Không tìm thấy chấm công");
 
-            // Kiểm tra thay đổi từng trường
-            if (dto.CheckInTime != attendance.CheckInTime)
-            {
-                history.OldValue += $"CheckIn: {oldCheckIn} | ";
-                history.NewValue += $"CheckIn: {newCheckIn} | ";
-                attendance.CheckInTime = dto.CheckInTime;
-                isChanged = true;
+                bool isChanged = false;
+                string oldCheckIn = attendance.CheckInTime?.ToString("HH:mm") ?? "";
+                string oldCheckOut = attendance.CheckOutTime?.ToString("HH:mm") ?? "";
+                string? newCheckIn = dto.CheckInTime?.ToString("HH:mm") ?? "";
+                string? newCheckOut = dto.CheckOutTime?.ToString("HH:mm") ?? "";
+
+                var history = new AttendanceHistory
+                {
+                    AttendanceId = attendance.AttendanceId,
+                    ActionType = "Update",
+                    PerformedBy = dto.PerformedBy,
+                    PerformedAt = DateTime.Now,
+                    OldValue = "",
+                    NewValue = ""
+                };
+
+                if (oldCheckIn != newCheckIn)
+                {
+                    history.OldValue += $"CheckIn: {oldCheckIn} | ";
+                    history.NewValue += $"CheckIn: {newCheckIn} | ";
+                    attendance.CheckInTime = dto.CheckInTime;
+                    isChanged = true;
+                }
+
+                if (oldCheckOut != newCheckOut)
+                {
+                    history.OldValue += $"CheckOut: {oldCheckOut} | ";
+                    history.NewValue += $"CheckOut: {newCheckOut} | ";
+                    attendance.CheckOutTime = dto.CheckOutTime;
+                    isChanged = true;
+                }
+
+                if (!string.IsNullOrWhiteSpace(dto.Reason))
+                {
+                    history.NewValue += $"Lý do: {dto.Reason}";
+                    isChanged = true;
+                }
+
+                if (!isChanged)
+                {
+                    return BadRequest("Không có thay đổi nào được thực hiện.");
+                }
+
+                _context.AttendanceHistories.Add(history);
+                await _context.SaveChangesAsync();
+                return Ok(new { message = "Cập nhật thành công" });
             }
-
-            if (dto.CheckOutTime != attendance.CheckOutTime)
+            else
             {
-                history.OldValue += $"CheckOut: {oldCheckOut} | ";
-                history.NewValue += $"CheckOut: {newCheckOut} | ";
-                attendance.CheckOutTime = dto.CheckOutTime;
-                isChanged = true;
+                // Nếu không có AttendanceId: tạo mới bản ghi
+                if (dto.EmployeeId == null || dto.SessionId == null || dto.WorkDate == null)
+                    return BadRequest("Thiếu thông tin để tạo mới chấm công.");
+
+                var newAttendance = new Attendance
+                {
+                    EmployeeId = dto.EmployeeId.Value,
+                    SessionId = dto.SessionId.Value,
+                    WorkDate = dto.WorkDate,
+                    CheckInTime = dto.CheckInTime,
+                    CheckOutTime = dto.CheckOutTime
+                };
+
+                _context.Attendances.Add(newAttendance);
+                await _context.SaveChangesAsync(); // để có AttendanceId sau khi insert
+
+                if (!string.IsNullOrWhiteSpace(dto.Reason))
+                {
+                    var history = new AttendanceHistory
+                    {
+                        AttendanceId = newAttendance.AttendanceId,
+                        ActionType = "Insert",
+                        PerformedBy = dto.PerformedBy,
+                        PerformedAt = DateTime.Now,
+                        OldValue = "",
+                        NewValue = $"CheckIn: {dto.CheckInTime?.ToString("HH:mm") ?? ""} | " +
+                                   $"CheckOut: {dto.CheckOutTime?.ToString("HH:mm") ?? ""} | " +
+                                   $"Lý do: {dto.Reason}"
+                    };
+
+                    _context.AttendanceHistories.Add(history);
+                    await _context.SaveChangesAsync();
+                }
+
+                return Ok(new { message = "Tạo mới thành công", newAttendanceId = newAttendance.AttendanceId });
             }
-
-            if (!string.IsNullOrWhiteSpace(dto.Reason))
-            {
-                history.NewValue += $"Lý do: {dto.Reason}";
-                isChanged = true;
-            }
-
-            if (!isChanged)
-            {
-                return BadRequest("Không có thay đổi nào được thực hiện.");
-            }
-
-            // Cập nhật và lưu
-            await _context.SaveChangesAsync();
-            _context.AttendanceHistories.Add(history);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Cập nhật thành công" });
         }
+
+
     }
 }
