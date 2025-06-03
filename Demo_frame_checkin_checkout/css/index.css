@@ -211,3 +211,13 @@ form button[type="submit"]:hover {
   from { opacity: 0; transform: translateY(-20px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+
+.leave-note {
+  color: green;
+  font-weight: bold;
+}
+.absent-note {
+  color: red;
+  font-weight: bold;
+}

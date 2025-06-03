@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
     errorMessage.textContent = ""; // Xóa lỗi cũ
 
     try {
-      const response = await fetch("https://localhost:5001/api/Authen/login", {
+      const response = await fetch("https://localhost:5125/api/Authen/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -36,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("username", data.username || "");
       localStorage.setItem("role", data.role || "");
       localStorage.setItem("fullName", data.fullName || "");
+      localStorage.setItem("userId", String(data.userId || ""));
 
       //  Chuyển employeeId thành chuỗi nếu là số
       if (data.employeeId !== undefined && data.employeeId !== null) {

@@ -6,11 +6,40 @@ document.addEventListener("DOMContentLoaded", () => {
   const modal = document.getElementById("updateModal");
   const closeModalBtn = document.getElementById("closeModal");
   const updateForm = document.getElementById("updateForm");
-
+  const timeInputs = document.getElementById("timeInputs");
   const role = localStorage.getItem("role");
   const token = localStorage.getItem("token");
   const employeeIdRaw = localStorage.getItem("employeeId");
   const employeeId = employeeIdRaw ? parseInt(employeeIdRaw) : null;
+
+  
+
+  if (!employeeId) {
+    console.error("employeeId không hợp lệ hoặc chưa được lưu trong localStorage");
+    alert("Không tìm thấy thông tin nhân viên. Vui lòng đăng nhập lại.");
+    return;
+  }
+
+  let selectedYear, selectedMonth, selectedDate;
+
+  closeModalBtn.onclick = () => modal.style.display = "none";
+  window.onclick = e => { if (e.target === modal) modal.style.display = "none"; };
+
+  document.querySelectorAll('input[name="status"]').forEach(radio => {
+    radio.addEventListener("change", () => {
+      if (!timeInputs) return;
+
+      if (radio.value === "Normal" && radio.checked) {
+        timeInputs.style.display = "block";
+      } else if (radio.checked) {
+        timeInputs.style.display = "none";
+        ["morningCheckIn", "morningCheckOut", "afternoonCheckIn", "afternoonCheckOut"].forEach(id => {
+          const input = document.getElementById(id);
+          if (input) input.value = "";
+        });
+      }
+    });
+  });
 
   function populateMonthYearSelectors() {
     for (let y = 2020; y <= 2030; y++) {
@@ -19,107 +48,116 @@ document.addEventListener("DOMContentLoaded", () => {
       opt.textContent = y;
       yearSelect.appendChild(opt);
     }
-
     for (let m = 0; m < 12; m++) {
       const opt = document.createElement("option");
       opt.value = m;
       opt.textContent = `Tháng ${m + 1}`;
       monthSelect.appendChild(opt);
     }
-
     const today = new Date();
     yearSelect.value = today.getFullYear();
     monthSelect.value = today.getMonth();
   }
 
+  function formatDate(date) {
+    const year = date.getFullYear();
+    const month = (`0${date.getMonth() + 1}`).slice(-2);
+    const day = (`0${date.getDate()}`).slice(-2);
+    return `${year}-${month}-${day}`;
+  }
+
   async function generateCalendar(year, month) {
     calendar.innerHTML = "";
 
-    const apiUrl = `https://localhost:5001/api/TimeSkip/attendance/monthly?employeeId=${employeeId}&month=${month + 1}&year=${year}`;
+    const apiUrl = `https://localhost:5125/api/TimeSkip/attendances/summary-employee?employeeId=${employeeId}&month=${month + 1}&year=${year}`;
     let attendanceData = [];
-
     try {
-      const response = await fetch(apiUrl);
-      if (response.ok) {
-        attendanceData = await response.json();
-      } else {
+      const response = await fetch(apiUrl, { headers: { "Authorization": `Bearer ${token}` } });
+      if (!response.ok) {
         console.error("API error:", response.status);
+        alert(`Lỗi khi lấy dữ liệu chấm công: ${response.status}`);
+        return;
       }
+      const json = await response.json();
+      attendanceData = Array.isArray(json.daily) ? json.daily
+                     : Array.isArray(json) ? json
+                     : (json.data || []);
     } catch (err) {
       console.error("Fetch failed:", err);
+      alert("Lỗi kết nối API chấm công");
+      return;
     }
 
-    const daysOfWeek = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
+    const daysOfWeek = ["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7","Chủ nhật"];
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = new Date();
-
-    let startDay = firstDay === 0 ? 6 : firstDay - 1;
+    const startDay = firstDay === 0 ? 6 : firstDay - 1;
     const grid = document.createElement("div");
     grid.className = "calendar-grid-inner";
 
-    // Header thứ
     daysOfWeek.forEach(day => {
       const cell = document.createElement("div");
       cell.className = "calendar-cell header";
       cell.textContent = day;
       grid.appendChild(cell);
     });
-
-    // Ô trống đầu tháng
     for (let i = 0; i < startDay; i++) {
       const emptyCell = document.createElement("div");
       emptyCell.className = "calendar-cell empty";
       grid.appendChild(emptyCell);
     }
 
-    // Các ngày trong tháng
     for (let date = 1; date <= daysInMonth; date++) {
       const cell = document.createElement("div");
       cell.className = "calendar-cell day";
-
       const currentDate = new Date(year, month, date);
-      const dayOfWeek = currentDate.getDay(); // 0 = Sunday
+      const dayOfWeek = currentDate.getDay();
+      if (dayOfWeek === 0) cell.classList.add("sunday");
 
-      if (dayOfWeek === 0) {
-        cell.classList.add("sunday");
-      }
+      const currentDateStr = formatDate(currentDate);
+      const attendance = attendanceData.find(a => a.date === currentDateStr);
 
-      const attendance = attendanceData.find(a => a.day === date);
       let contentHtml = `<strong>${date}</strong><br>`;
 
       if (currentDate <= today) {
-        const isSunday = dayOfWeek === 0;
-
-        if (isSunday) {
+        if (dayOfWeek === 0) {
           contentHtml += `<span class="no-data">Chủ nhật</span>`;
-        } else {
-          contentHtml += `
-          <span class="checkin">Sáng: ${attendance?.morningCheckIn || "Vắng"} - ${attendance?.morningCheckOut || "Vắng"}</span><br>
-          <span class="checkout">Chiều: ${attendance?.afternoonCheckIn || "Vắng"} - ${attendance?.afternoonCheckOut || "Vắng"}</span>
-          `;
+        } else if (attendance && attendance.status === "Confirm") {
+          if (attendance.selectedNote === "Leave") {
+            contentHtml += `<span class="leave">Nghỉ phép (${attendance.leaveType === "Paid" ? "có lương" : "không lương"})</span>`;
+          } else if (attendance.selectedNote === "Absent") {
+            contentHtml += `<span class="absent">Nghỉ không phép</span>`;
+          }
+        } else if (attendance && (attendance.morningCheckIn || attendance.afternoonCheckIn)) {
+          if (attendance.morningCheckIn || attendance.morningCheckOut) {
+            contentHtml += `<span class="checkin">Sáng: ${attendance.morningCheckIn || ""} - ${attendance.morningCheckOut || ""}</span><br>`;
+          }
+          if (attendance.afternoonCheckIn || attendance.afternoonCheckOut) {
+            contentHtml += `<span class="checkout">Chiều: ${attendance.afternoonCheckIn || ""} - ${attendance.afternoonCheckOut || ""}</span><br>`;
+          }
+          if (attendance.lateMinutes > 0) {
+            contentHtml += `<span class="late">Đi muộn: ${attendance.lateMinutes} phút</span>`;
+          }
         }
       }
 
       cell.innerHTML = contentHtml;
 
-      // Thêm sự kiện click mở modal chỉ với những ngày hợp lệ (không phải Chủ nhật)
       if (currentDate <= today && dayOfWeek !== 0) {
         cell.style.cursor = "pointer";
         cell.addEventListener("click", () => {
-          // Hiển thị modal
+          selectedYear = year;
+          selectedMonth = month;
+          selectedDate = date;
+
           modal.style.display = "flex";
+          document.querySelector('input[name="status"][value="Normal"]').checked = true;
+          timeInputs.style.display = "block";
 
-          // Điền dữ liệu cũ vào form
-          document.getElementById("morningCheckIn").value = attendance?.morningCheckIn || "";
-          document.getElementById("morningCheckOut").value = attendance?.morningCheckOut || "";
-          document.getElementById("afternoonCheckIn").value = attendance?.afternoonCheckIn || "";
-          document.getElementById("afternoonCheckOut").value = attendance?.afternoonCheckOut || "";
-
-          // Lưu lại thông tin ngày hiện tại để dùng khi gửi API
-          modal.dataset.year = year;
-          modal.dataset.month = month;
-          modal.dataset.date = date;
+          ["morningCheckIn", "morningCheckOut", "afternoonCheckIn", "afternoonCheckOut"].forEach(id => {
+            document.getElementById(id).value = attendance?.[id] || "";
+          });
         });
       }
 
@@ -130,61 +168,45 @@ document.addEventListener("DOMContentLoaded", () => {
     calendarTitle.textContent = `BẢNG CHẤM CÔNG THÁNG ${month + 1}/${year}`;
   }
 
-  // Đóng modal khi bấm nút đóng
-  closeModalBtn.onclick = () => {
-    modal.style.display = "none";
-  };
-
-  // Đóng modal khi click ngoài nội dung modal
-  window.onclick = function(event) {
-    if (event.target == modal) {
-      modal.style.display = "none";
-    }
-  };
-
-  // Xử lý submit form cập nhật chấm công
   updateForm.onsubmit = async (e) => {
     e.preventDefault();
 
-    if (role?.toLowerCase() !== "admin") {
-      alert("Bạn không có quyền cập nhật dữ liệu.");
-      return;  // Dừng không gửi request
+    const selectedNote = document.querySelector('input[name="note"]:checked')?.value;
+    if (!selectedNote) {
+      alert("Vui lòng chọn trạng thái làm việc.");
+      return;
     }
 
+    if ([selectedYear, selectedMonth, selectedDate].some(v => typeof v !== 'number')) {
+      alert("Chưa chọn ngày. Vui lòng chọn lại.");
+      return;
+    }
 
-    const morningIn = document.getElementById("morningCheckIn").value;
-    const morningOut = document.getElementById("morningCheckOut").value;
-    const afternoonIn = document.getElementById("afternoonCheckIn").value;
-    const afternoonOut = document.getElementById("afternoonCheckOut").value;
+    const isoDate = formatDate(new Date(selectedYear, selectedMonth, selectedDate));
 
-    const year = parseInt(modal.dataset.year);
-    const month = parseInt(modal.dataset.month);
-    const date = parseInt(modal.dataset.date);
-
-    const isoDate = new Date(year, month, date).toISOString().split('T')[0]; // yyyy-mm-dd
+    const bodyData = {
+      employeeId: employeeIdRaw,
+      workDate: isoDate,
+      note: selectedNote
+    };
 
     try {
-      const res = await fetch(`https://localhost:5001/api/Admin/${employeeId}`, {
-        method: "PUT",
+      const res = await fetch(`https://localhost:5125/api/TimeSkip/submit-leave`, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({
-          date: isoDate,
-          morningCheckIn: morningIn,
-          morningCheckOut: morningOut,
-          afternoonCheckIn: afternoonIn,
-          afternoonCheckOut: afternoonOut
-        })
+        body: JSON.stringify(bodyData)
       });
 
       if (res.ok) {
         alert("Cập nhật thành công!");
-        modal.style.display = "none";
-        generateCalendar(year, month); // reload lại lịch để cập nhật dữ liệu mới
+        document.getElementById("updateModal").style.display = "none";
+        generateCalendar(selectedYear, selectedMonth);
       } else {
         alert("Lỗi cập nhật");
+        console.error("Update error:", res.status, await res.text());
       }
     } catch (err) {
       alert("Lỗi kết nối API");
@@ -192,16 +214,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  // Sự kiện khi chọn tháng/năm
-  monthSelect.addEventListener("change", () => {
-    generateCalendar(+yearSelect.value, +monthSelect.value);
-  });
+  monthSelect.addEventListener("change", () => generateCalendar(+yearSelect.value, +monthSelect.value));
+  yearSelect.addEventListener("change", () => generateCalendar(+yearSelect.value, +monthSelect.value));
 
-  yearSelect.addEventListener("change", () => {
-    generateCalendar(+yearSelect.value, +monthSelect.value);
-  });
-
-  // Gọi khi khởi tạo
   populateMonthYearSelectors();
   generateCalendar(+yearSelect.value, +monthSelect.value);
 });
